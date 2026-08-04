@@ -10,7 +10,10 @@ export class EmployeeRepository {
 
   async create(createEmployeeDto: CreateEmployeeDto) {
     return this.prisma.employee.create({
-      data: createEmployeeDto,
+      data: {
+        ...createEmployeeDto,
+        joiningDate: new Date(createEmployeeDto.joiningDate),
+      },
     });
   }
 
