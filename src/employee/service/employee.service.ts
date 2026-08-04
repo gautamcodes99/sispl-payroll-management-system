@@ -8,7 +8,13 @@ export class EmployeeService {
   constructor(private readonly employeeRepository: EmployeeRepository) {}
 
   async create(createEmployeeDto: CreateEmployeeDto) {
-    return this.employeeRepository.create(createEmployeeDto);
+    const employee = await this.employeeRepository.create(createEmployeeDto);
+
+    return {
+      success: true,
+      message: 'Employee created successfully.',
+      data: employee,
+    };
   }
 
   async findEmployees(query: EmployeeQueryDto) {

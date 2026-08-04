@@ -5,13 +5,9 @@ import {
   IsDateString,
   IsNumber,
 } from 'class-validator';
-
 import { Type } from 'class-transformer';
 
 export class CreateEmployeeDto {
-  @IsString()
-  employeeCode!: string;
-
   @IsString()
   firstName!: string;
 

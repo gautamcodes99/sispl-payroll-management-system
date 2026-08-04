@@ -31,8 +31,8 @@ export class EmployeeQueryDto {
   status?: string;
 
   @IsOptional()
-  @IsIn(['employeeCode', 'firstName', 'joiningDate', 'status', 'createdAt'])
-  sortBy: string = 'employeeCode';
+  @IsIn(['id', 'firstName', 'lastName', 'joiningDate', 'status', 'createdAt'])
+  sortBy: string = 'id';
 
   @IsOptional()
   @IsIn(['asc', 'desc'])

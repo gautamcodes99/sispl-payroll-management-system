@@ -48,12 +48,6 @@ export class EmployeeRepository {
     if (search) {
       where.OR = [
         {
-          employeeCode: {
-            contains: search,
-            mode: 'insensitive',
-          },
-        },
-        {
           firstName: {
             contains: search,
             mode: 'insensitive',
@@ -90,7 +84,6 @@ export class EmployeeRepository {
         },
         select: {
           id: true,
-          employeeCode: true,
           firstName: true,
           lastName: true,
           department: true,
