@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { CreateEmployeeDto } from '../dto/create-employee.dto';
 import { EmployeeQueryDto } from '../dto/employee-query.dto';
+import { UpdateEmployeeDto } from '../dto/update-employee.dto';
 
 @Injectable()
 export class EmployeeRepository {
@@ -102,5 +103,42 @@ export class EmployeeRepository {
       employees,
       total,
     };
+  }
+  async findEmployeeById(id: number) {
+    return this.prisma.employee.findUnique({
+      where: {
+        id,
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        phone: true,
+        department: true,
+        designation: true,
+        joiningDate: true,
+        basicSalary: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+  }
+  async updateEmployee(id: number, updateEmployeeDto: UpdateEmployeeDto) {
+    const data: Prisma.EmployeeUpdateInput = {
+      ...updateEmployeeDto,
+    };
+
+    if (updateEmployeeDto.joiningDate) {
+      data.joiningDate = new Date(updateEmployeeDto.joiningDate);
+    }
+
+    return this.prisma.employee.update({
+      where: {
+        id,
+      },
+      data,
+    });
   }
 }
