@@ -6,6 +6,9 @@ import { Status } from '../../common/enums/status.enum';
 import { CreateWorkTypeDto } from '../dto/create-work-type.dto';
 import { UpdateWorkTypeDto } from '../dto/update-work-type.dto';
 import { UpdateWorkTypeStatusDto } from '../dto/update-work-type-status.dto';
+import { CreateDepartmentDto } from '../dto/create-department.dto';
+import { UpdateDepartmentDto } from '../dto/update-department.dto';
+import { UpdateDepartmentStatusDto } from '../dto/update-department-status.dto';
 
 @Injectable()
 export class OrganisationRepository {
@@ -110,6 +113,88 @@ export class OrganisationRepository {
       },
       data: {
         status: updateWorkTypeStatusDto.status,
+      },
+    });
+  }
+  async createDepartment(createDepartmentDto: CreateDepartmentDto) {
+    return this.prisma.department.create({
+      data: createDepartmentDto,
+    });
+  }
+  async findDepartments() {
+    return this.prisma.department.findMany({
+      include: {
+        workType: {
+          select: {
+            id: true,
+            workTypeName: true,
+            site: {
+              select: {
+                id: true,
+                siteName: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: [
+        {
+          workType: {
+            site: {
+              siteName: 'asc',
+            },
+          },
+        },
+        {
+          workType: {
+            workTypeName: 'asc',
+          },
+        },
+        {
+          departmentName: 'asc',
+        },
+      ],
+    });
+  }
+  async findDepartmentById(id: number) {
+    return this.prisma.department.findUniqueOrThrow({
+      where: {
+        id,
+      },
+      include: {
+        workType: {
+          select: {
+            id: true,
+            workTypeName: true,
+            site: {
+              select: {
+                id: true,
+                siteName: true,
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+  async updateDepartment(id: number, updateDepartmentDto: UpdateDepartmentDto) {
+    return this.prisma.department.update({
+      where: {
+        id,
+      },
+      data: updateDepartmentDto,
+    });
+  }
+  async updateDepartmentStatus(
+    id: number,
+    updateDepartmentStatusDto: UpdateDepartmentStatusDto,
+  ) {
+    return this.prisma.department.update({
+      where: {
+        id,
+      },
+      data: {
+        status: updateDepartmentStatusDto.status,
       },
     });
   }

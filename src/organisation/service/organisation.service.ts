@@ -6,6 +6,9 @@ import { UpdateStatusDto } from '../../common/dto/update-status.dto';
 import { CreateWorkTypeDto } from '../dto/create-work-type.dto';
 import { UpdateWorkTypeDto } from '../dto/update-work-type.dto';
 import { UpdateWorkTypeStatusDto } from '../dto/update-work-type-status.dto';
+import { CreateDepartmentDto } from '../dto/create-department.dto';
+import { UpdateDepartmentDto } from '../dto/update-department.dto';
+import { UpdateDepartmentStatusDto } from '../dto/update-department-status.dto';
 
 @Injectable()
 export class OrganisationService {
@@ -139,6 +142,75 @@ export class OrganisationService {
       success: true,
       message: 'Work Type status updated successfully.',
       data: workType,
+    };
+  }
+  async createDepartment(createDepartmentDto: CreateDepartmentDto) {
+    // Verify Work Type exists
+    await this.findWorkTypeById(createDepartmentDto.workTypeId);
+
+    const department =
+      await this.organisationRepository.createDepartment(createDepartmentDto);
+
+    return {
+      success: true,
+      message: 'Department created successfully.',
+      data: department,
+    };
+  }
+  async findDepartments() {
+    const departments = await this.organisationRepository.findDepartments();
+
+    return {
+      success: true,
+      message: 'Departments fetched successfully.',
+      data: departments,
+    };
+  }
+  async findDepartmentById(id: number) {
+    const department = await this.organisationRepository.findDepartmentById(id);
+
+    return {
+      success: true,
+      message: 'Department fetched successfully.',
+      data: department,
+    };
+  }
+  async updateDepartment(id: number, updateDepartmentDto: UpdateDepartmentDto) {
+    // Verify Department exists
+    await this.organisationRepository.findDepartmentById(id);
+
+    // Verify Work Type exists (only if workTypeId is being changed)
+    if (updateDepartmentDto.workTypeId) {
+      await this.findWorkTypeById(updateDepartmentDto.workTypeId);
+    }
+
+    const department = await this.organisationRepository.updateDepartment(
+      id,
+      updateDepartmentDto,
+    );
+
+    return {
+      success: true,
+      message: 'Department updated successfully.',
+      data: department,
+    };
+  }
+  async updateDepartmentStatus(
+    id: number,
+    updateDepartmentStatusDto: UpdateDepartmentStatusDto,
+  ) {
+    // Verify Department exists
+    await this.organisationRepository.findDepartmentById(id);
+
+    const department = await this.organisationRepository.updateDepartmentStatus(
+      id,
+      updateDepartmentStatusDto,
+    );
+
+    return {
+      success: true,
+      message: 'Department status updated successfully.',
+      data: department,
     };
   }
 }
