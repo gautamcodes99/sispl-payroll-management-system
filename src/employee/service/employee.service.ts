@@ -3,6 +3,7 @@ import { CreateEmployeeDto } from '../dto/create-employee.dto';
 import { EmployeeQueryDto } from '../dto/employee-query.dto';
 import { EmployeeRepository } from '../repository/employee.repository';
 import { UpdateEmployeeDto } from '../dto/update-employee.dto';
+import { UpdateEmployeeStatusDto } from '../dto/update-employee-status.dto';
 
 @Injectable()
 export class EmployeeService {
@@ -63,6 +64,28 @@ export class EmployeeService {
     return {
       success: true,
       message: 'Employee updated successfully.',
+      data: updatedEmployee,
+    };
+  }
+  async updateEmployeeStatus(
+    id: number,
+    updateEmployeeStatusDto: UpdateEmployeeStatusDto,
+  ) {
+    // Check if employee exists
+    const employee = await this.employeeRepository.findEmployeeById(id);
+
+    if (!employee) {
+      throw new NotFoundException('Employee not found.');
+    }
+
+    const updatedEmployee = await this.employeeRepository.updateEmployeeStatus(
+      id,
+      updateEmployeeStatusDto,
+    );
+
+    return {
+      success: true,
+      message: 'Employee status updated successfully.',
       data: updatedEmployee,
     };
   }

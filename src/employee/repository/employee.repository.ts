@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { CreateEmployeeDto } from '../dto/create-employee.dto';
 import { EmployeeQueryDto } from '../dto/employee-query.dto';
 import { UpdateEmployeeDto } from '../dto/update-employee.dto';
+import { UpdateEmployeeStatusDto } from '../dto/update-employee-status.dto';
 
 @Injectable()
 export class EmployeeRepository {
@@ -120,8 +121,6 @@ export class EmployeeRepository {
         joiningDate: true,
         basicSalary: true,
         status: true,
-        createdAt: true,
-        updatedAt: true,
       },
     });
   }
@@ -139,6 +138,25 @@ export class EmployeeRepository {
         id,
       },
       data,
+    });
+  }
+  async updateEmployeeStatus(
+    id: number,
+    updateEmployeeStatusDto: UpdateEmployeeStatusDto,
+  ) {
+    return this.prisma.employee.update({
+      where: {
+        id,
+      },
+      data: {
+        status: updateEmployeeStatusDto.status,
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        status: true,
+      },
     });
   }
 }

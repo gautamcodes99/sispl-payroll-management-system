@@ -20,4 +20,79 @@ model Employee {
   status       String   @default("ACTIVE")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  attendances Attendance[]
+}
+model Site {
+  id              Int        @id @default(autoincrement())
+
+  siteName        String
+
+  address         String?
+
+  city            String?
+
+  state           String?
+
+  pinCode         String?
+
+  contactPerson   String?
+
+  contactNumber   String?
+
+  status          String     @default("ACTIVE")
+
+  workTypes       WorkType[]
+
+  createdAt       DateTime   @default(now())
+
+  updatedAt       DateTime   @updatedAt
+}
+model WorkType {
+  id            Int          @id @default(autoincrement())
+
+  siteId        Int
+  site          Site         @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  workTypeName  String
+
+  status        String       @default("ACTIVE")
+
+  departments   Department[]
+
+  createdAt     DateTime     @default(now())
+
+  updatedAt     DateTime     @updatedAt
+}
+model Department {
+  id               Int        @id @default(autoincrement())
+
+  workTypeId       Int
+  workType         WorkType   @relation(fields: [workTypeId], references: [id], onDelete: Cascade)
+
+  departmentName   String
+
+  status           String     @default("ACTIVE")
+
+  createdAt        DateTime   @default(now())
+
+  updatedAt        DateTime   @updatedAt
+}
+model Attendance {
+  id          Int      @id @default(autoincrement())
+
+  employeeId  Int
+  employee    Employee @relation(fields: [employeeId], references: [id])
+
+  attendanceDate DateTime
+
+  status String
+
+  otHours Decimal @default(0) @db.Decimal(5,2)
+
+  remarks String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([employeeId, attendanceDate])
 }
