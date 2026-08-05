@@ -3,6 +3,7 @@ import { CreateSiteDto } from '../dto/create-site.dto';
 import { OrganisationRepository } from '../repository/organisation.repository';
 import { UpdateSiteDto } from '../dto/update-site.dto';
 import { UpdateStatusDto } from '../../common/dto/update-status.dto';
+import { CreateWorkTypeDto } from '../dto/create-work-type.dto';
 
 @Injectable()
 export class OrganisationService {
@@ -67,6 +68,19 @@ export class OrganisationService {
       success: true,
       message: 'Site status updated successfully.',
       data: site,
+    };
+  }
+  async createWorkType(createWorkTypeDto: CreateWorkTypeDto) {
+    // Verify the Site exists
+    await this.findSiteById(createWorkTypeDto.siteId);
+
+    const workType =
+      await this.organisationRepository.createWorkType(createWorkTypeDto);
+
+    return {
+      success: true,
+      message: 'Work Type created successfully.',
+      data: workType,
     };
   }
 }

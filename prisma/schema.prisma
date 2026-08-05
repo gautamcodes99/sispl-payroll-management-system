@@ -62,6 +62,7 @@ model WorkType {
   createdAt     DateTime     @default(now())
 
   updatedAt     DateTime     @updatedAt
+  @@unique([siteId, workTypeName])
 }
 model Department {
   id               Int        @id @default(autoincrement())
@@ -76,6 +77,7 @@ model Department {
   createdAt        DateTime   @default(now())
 
   updatedAt        DateTime   @updatedAt
+  @@unique([workTypeId, departmentName])
 }
 model Attendance {
   id          Int      @id @default(autoincrement())

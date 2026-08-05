@@ -22,6 +22,9 @@ export class PrismaExceptionFilter implements ExceptionFilter {
         throw new NotFoundException('Record not found.');
 
       default:
+        console.log(exception);
+        console.log('Code:', exception.code);
+
         response.status(500).json({
           success: false,
           message: 'Internal server error.',

@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreateSiteDto } from '../dto/create-site.dto';
 import { UpdateSiteDto } from '../dto/update-site.dto';
 import { Status } from '../../common/enums/status.enum';
+import { CreateWorkTypeDto } from '../dto/create-work-type.dto';
 
 @Injectable()
 export class OrganisationRepository {
@@ -45,6 +46,11 @@ export class OrganisationRepository {
       data: {
         status,
       },
+    });
+  }
+  async createWorkType(createWorkTypeDto: CreateWorkTypeDto) {
+    return this.prisma.workType.create({
+      data: createWorkTypeDto,
     });
   }
 }

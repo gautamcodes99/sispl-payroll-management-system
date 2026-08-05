@@ -11,6 +11,7 @@ import { OrganisationService } from '../service/organisation.service';
 import { CreateSiteDto } from '../dto/create-site.dto';
 import { UpdateSiteDto } from '../dto/update-site.dto';
 import { UpdateStatusDto } from '../../common/dto/update-status.dto';
+import { CreateWorkTypeDto } from '../dto/create-work-type.dto';
 
 @Controller('organisation')
 export class OrganisationController {
@@ -37,5 +38,9 @@ export class OrganisationController {
     @Body() updateStatusDto: UpdateStatusDto,
   ) {
     return this.organisationService.updateSiteStatus(id, updateStatusDto);
+  }
+  @Post('work-types')
+  createWorkType(@Body() createWorkTypeDto: CreateWorkTypeDto) {
+    return this.organisationService.createWorkType(createWorkTypeDto);
   }
 }
