@@ -4,6 +4,8 @@ import { CreateSiteDto } from '../dto/create-site.dto';
 import { UpdateSiteDto } from '../dto/update-site.dto';
 import { Status } from '../../common/enums/status.enum';
 import { CreateWorkTypeDto } from '../dto/create-work-type.dto';
+import { UpdateWorkTypeDto } from '../dto/update-work-type.dto';
+import { UpdateWorkTypeStatusDto } from '../dto/update-work-type-status.dto';
 
 @Injectable()
 export class OrganisationRepository {
@@ -51,6 +53,64 @@ export class OrganisationRepository {
   async createWorkType(createWorkTypeDto: CreateWorkTypeDto) {
     return this.prisma.workType.create({
       data: createWorkTypeDto,
+    });
+  }
+  async findWorkTypes() {
+    return this.prisma.workType.findMany({
+      include: {
+        site: {
+          select: {
+            id: true,
+            siteName: true,
+          },
+        },
+      },
+      orderBy: [
+        {
+          site: {
+            siteName: 'asc',
+          },
+        },
+        {
+          workTypeName: 'asc',
+        },
+      ],
+    });
+  }
+  async findWorkTypeById(id: number) {
+    return this.prisma.workType.findUniqueOrThrow({
+      where: {
+        id,
+      },
+      include: {
+        site: {
+          select: {
+            id: true,
+            siteName: true,
+          },
+        },
+      },
+    });
+  }
+  async updateWorkType(id: number, updateWorkTypeDto: UpdateWorkTypeDto) {
+    return this.prisma.workType.update({
+      where: {
+        id,
+      },
+      data: updateWorkTypeDto,
+    });
+  }
+  async updateWorkTypeStatus(
+    id: number,
+    updateWorkTypeStatusDto: UpdateWorkTypeStatusDto,
+  ) {
+    return this.prisma.workType.update({
+      where: {
+        id,
+      },
+      data: {
+        status: updateWorkTypeStatusDto.status,
+      },
     });
   }
 }

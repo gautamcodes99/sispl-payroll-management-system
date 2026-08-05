@@ -12,6 +12,8 @@ import { CreateSiteDto } from '../dto/create-site.dto';
 import { UpdateSiteDto } from '../dto/update-site.dto';
 import { UpdateStatusDto } from '../../common/dto/update-status.dto';
 import { CreateWorkTypeDto } from '../dto/create-work-type.dto';
+import { UpdateWorkTypeDto } from '../dto/update-work-type.dto';
+import { UpdateWorkTypeStatusDto } from '../dto/update-work-type-status.dto';
 
 @Controller('organisation')
 export class OrganisationController {
@@ -42,5 +44,30 @@ export class OrganisationController {
   @Post('work-types')
   createWorkType(@Body() createWorkTypeDto: CreateWorkTypeDto) {
     return this.organisationService.createWorkType(createWorkTypeDto);
+  }
+  @Get('work-types')
+  findWorkTypes() {
+    return this.organisationService.findWorkTypes();
+  }
+  @Get('work-types/:id')
+  findWorkTypeById(@Param('id', ParseIntPipe) id: number) {
+    return this.organisationService.findWorkTypeById(id);
+  }
+  @Patch('work-types/:id')
+  updateWorkType(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateWorkTypeDto: UpdateWorkTypeDto,
+  ) {
+    return this.organisationService.updateWorkType(id, updateWorkTypeDto);
+  }
+  @Patch('work-types/:id/status')
+  updateWorkTypeStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateWorkTypeStatusDto: UpdateWorkTypeStatusDto,
+  ) {
+    return this.organisationService.updateWorkTypeStatus(
+      id,
+      updateWorkTypeStatusDto,
+    );
   }
 }

@@ -4,6 +4,8 @@ import { OrganisationRepository } from '../repository/organisation.repository';
 import { UpdateSiteDto } from '../dto/update-site.dto';
 import { UpdateStatusDto } from '../../common/dto/update-status.dto';
 import { CreateWorkTypeDto } from '../dto/create-work-type.dto';
+import { UpdateWorkTypeDto } from '../dto/update-work-type.dto';
+import { UpdateWorkTypeStatusDto } from '../dto/update-work-type-status.dto';
 
 @Injectable()
 export class OrganisationService {
@@ -80,6 +82,62 @@ export class OrganisationService {
     return {
       success: true,
       message: 'Work Type created successfully.',
+      data: workType,
+    };
+  }
+  async findWorkTypes() {
+    const workTypes = await this.organisationRepository.findWorkTypes();
+
+    return {
+      success: true,
+      message: 'Work Types fetched successfully.',
+      data: workTypes,
+    };
+  }
+  async findWorkTypeById(id: number) {
+    const workType = await this.organisationRepository.findWorkTypeById(id);
+
+    return {
+      success: true,
+      message: 'Work Type fetched successfully.',
+      data: workType,
+    };
+  }
+  async updateWorkType(id: number, updateWorkTypeDto: UpdateWorkTypeDto) {
+    // Verify Work Type exists
+    await this.organisationRepository.findWorkTypeById(id);
+
+    // Verify Site exists (only if siteId is being changed)
+    if (updateWorkTypeDto.siteId) {
+      await this.findSiteById(updateWorkTypeDto.siteId);
+    }
+
+    const workType = await this.organisationRepository.updateWorkType(
+      id,
+      updateWorkTypeDto,
+    );
+
+    return {
+      success: true,
+      message: 'Work Type updated successfully.',
+      data: workType,
+    };
+  }
+  async updateWorkTypeStatus(
+    id: number,
+    updateWorkTypeStatusDto: UpdateWorkTypeStatusDto,
+  ) {
+    // Verify Work Type exists
+    await this.organisationRepository.findWorkTypeById(id);
+
+    const workType = await this.organisationRepository.updateWorkTypeStatus(
+      id,
+      updateWorkTypeStatusDto,
+    );
+
+    return {
+      success: true,
+      message: 'Work Type status updated successfully.',
       data: workType,
     };
   }
