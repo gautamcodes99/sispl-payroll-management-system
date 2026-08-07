@@ -1,6 +1,8 @@
 import {
   IsDateString,
   IsEmail,
+  IsInt,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
@@ -10,10 +12,17 @@ import { Type } from 'class-transformer';
 export class UpdateEmployeeDto {
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
+  employeeCode?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
   firstName?: string;
 
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
   lastName?: string;
 
   @IsOptional()
@@ -25,16 +34,13 @@ export class UpdateEmployeeDto {
   phone?: string;
 
   @IsOptional()
-  @IsString()
-  department?: string;
-
-  @IsOptional()
-  @IsString()
-  designation?: string;
+  @Type(() => Number)
+  @IsInt()
+  designationId?: number;
 
   @IsOptional()
   @IsDateString()
-  joiningDate?: string;
+  joiningDate?: Date;
 
   @IsOptional()
   @Type(() => Number)

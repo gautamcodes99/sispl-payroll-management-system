@@ -17,6 +17,9 @@ import { UpdateWorkTypeStatusDto } from '../dto/update-work-type-status.dto';
 import { CreateDepartmentDto } from '../dto/create-department.dto';
 import { UpdateDepartmentDto } from '../dto/update-department.dto';
 import { UpdateDepartmentStatusDto } from '../dto/update-department-status.dto';
+import { CreateDesignationDto } from '../dto/create-designation.dto';
+import { UpdateDesignationDto } from '../dto/update-designation.dto';
+import { UpdateDesignationStatusDto } from '../dto/update-designation-status.dto';
 
 @Controller('organisation')
 export class OrganisationController {
@@ -100,6 +103,35 @@ export class OrganisationController {
     return this.organisationService.updateDepartmentStatus(
       id,
       updateDepartmentStatusDto,
+    );
+  }
+  @Post('designations')
+  createDesignation(@Body() createDesignationDto: CreateDesignationDto) {
+    return this.organisationService.createDesignation(createDesignationDto);
+  }
+  @Get('designations')
+  findDesignations() {
+    return this.organisationService.findDesignations();
+  }
+  @Get('designations/:id')
+  findDesignationById(@Param('id', ParseIntPipe) id: number) {
+    return this.organisationService.findDesignationById(id);
+  }
+  @Patch('designations/:id')
+  updateDesignation(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateDesignationDto: UpdateDesignationDto,
+  ) {
+    return this.organisationService.updateDesignation(id, updateDesignationDto);
+  }
+  @Patch('designations/:id/status')
+  updateDesignationStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateDesignationStatusDto: UpdateDesignationStatusDto,
+  ) {
+    return this.organisationService.updateDesignationStatus(
+      id,
+      updateDesignationStatusDto,
     );
   }
 }

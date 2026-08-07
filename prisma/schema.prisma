@@ -8,19 +8,27 @@ datasource db {
 }
 
 model Employee {
-  id           Int      @id @default(autoincrement())
-  firstName    String
-  lastName     String
-  email        String?  @unique
-  phone        String?
-  department   String
-  designation  String
-  joiningDate  DateTime
-  basicSalary  Decimal
-  status       String   @default("ACTIVE")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  attendances Attendance[]
+  id             Int          @id @default(autoincrement())
+
+  firstName      String
+  lastName       String
+
+  email          String?      @unique
+  phone          String?
+
+  designationId  Int
+  designation    Designation  @relation(fields: [designationId], references: [id], onDelete: Restrict)
+
+  joiningDate    DateTime
+
+  basicSalary    Decimal
+
+  status         String       @default("ACTIVE")
+
+  attendances    Attendance[]
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 }
 model Site {
   id              Int        @id @default(autoincrement())
@@ -74,27 +82,54 @@ model Department {
 
   status           String     @default("ACTIVE")
 
+  designations     Designation[]
+
   createdAt        DateTime   @default(now())
 
   updatedAt        DateTime   @updatedAt
+
   @@unique([workTypeId, departmentName])
 }
-model Attendance {
-  id          Int      @id @default(autoincrement())
+model Designation {
+  id               Int          @id @default(autoincrement())
 
-  employeeId  Int
-  employee    Employee @relation(fields: [employeeId], references: [id])
+  departmentId     Int
+  department       Department   @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  designationName  String
+
+  status           String       @default("ACTIVE")
+
+  employees        Employee[]
+
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@unique([departmentId, designationName])
+}
+model Attendance {
+  id             Int               @id @default(autoincrement())
+
+  employeeId     Int
+  employee       Employee          @relation(fields: [employeeId], references: [id])
 
   attendanceDate DateTime
 
-  status String
+  status         AttendanceStatus
 
-  otHours Decimal @default(0) @db.Decimal(5,2)
+  otHours        Decimal           @default(0) @db.Decimal(5,2)
 
-  remarks String?
+  remarks        String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 
   @@unique([employeeId, attendanceDate])
+}
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LEAVE
+  HOLIDAY
+  WEEKLY_OFF
 }

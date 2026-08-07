@@ -13,34 +13,33 @@ export class EmployeeRepository {
   async create(createEmployeeDto: CreateEmployeeDto) {
     return this.prisma.employee.create({
       data: {
-        ...createEmployeeDto,
+        firstName: createEmployeeDto.firstName,
+        lastName: createEmployeeDto.lastName,
+        email: createEmployeeDto.email,
+        phone: createEmployeeDto.phone,
         joiningDate: new Date(createEmployeeDto.joiningDate),
+        basicSalary: createEmployeeDto.basicSalary,
+
+        designation: {
+          connect: {
+            id: createEmployeeDto.designationId,
+          },
+        },
       },
     });
   }
 
   async findEmployees(query: EmployeeQueryDto) {
-    const {
-      page,
-      limit,
-      search,
-      department,
-      designation,
-      status,
-      sortBy,
-      order,
-    } = query;
+    const { page, limit, search, designation, status, sortBy, order } = query;
 
     const skip = (page - 1) * limit;
 
     const where: Prisma.EmployeeWhereInput = {};
 
-    if (department) {
-      where.department = department;
-    }
-
     if (designation) {
-      where.designation = designation;
+      where.designation = {
+        designationName: designation,
+      };
     }
 
     if (status) {
@@ -88,10 +87,33 @@ export class EmployeeRepository {
           id: true,
           firstName: true,
           lastName: true,
-          department: true,
-          designation: true,
           joiningDate: true,
           status: true,
+
+          designation: {
+            select: {
+              id: true,
+              designationName: true,
+              department: {
+                select: {
+                  id: true,
+                  departmentName: true,
+                  workType: {
+                    select: {
+                      id: true,
+                      workTypeName: true,
+                      site: {
+                        select: {
+                          id: true,
+                          siteName: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
       }),
 
@@ -105,6 +127,7 @@ export class EmployeeRepository {
       total,
     };
   }
+
   async findEmployeeById(id: number) {
     return this.prisma.employee.findUnique({
       where: {
@@ -116,21 +139,54 @@ export class EmployeeRepository {
         lastName: true,
         email: true,
         phone: true,
-        department: true,
-        designation: true,
         joiningDate: true,
         basicSalary: true,
         status: true,
+        designation: {
+          select: {
+            id: true,
+            designationName: true,
+            department: {
+              select: {
+                id: true,
+                departmentName: true,
+                workType: {
+                  select: {
+                    id: true,
+                    workTypeName: true,
+                    site: {
+                      select: {
+                        id: true,
+                        siteName: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     });
   }
+
   async updateEmployee(id: number, updateEmployeeDto: UpdateEmployeeDto) {
+    const { designationId, joiningDate, ...rest } = updateEmployeeDto;
+
     const data: Prisma.EmployeeUpdateInput = {
-      ...updateEmployeeDto,
+      ...rest,
     };
 
-    if (updateEmployeeDto.joiningDate) {
-      data.joiningDate = new Date(updateEmployeeDto.joiningDate);
+    if (joiningDate) {
+      data.joiningDate = new Date(joiningDate);
+    }
+
+    if (designationId) {
+      data.designation = {
+        connect: {
+          id: designationId,
+        },
+      };
     }
 
     return this.prisma.employee.update({

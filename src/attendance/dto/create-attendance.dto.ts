@@ -1,0 +1,33 @@
+import {
+  IsDateString,
+  IsEnum,
+  IsInt,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { AttendanceStatus } from '@prisma/client';
+
+export class CreateAttendanceDto {
+  @Type(() => Number)
+  @IsInt()
+  employeeId!: number;
+
+  @IsDateString()
+  attendanceDate!: Date;
+
+  @IsEnum(AttendanceStatus)
+  status!: AttendanceStatus;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  otHours!: number;
+
+  @IsOptional()
+  @IsString()
+  remarks?: string;
+}

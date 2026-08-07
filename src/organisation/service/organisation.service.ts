@@ -9,6 +9,9 @@ import { UpdateWorkTypeStatusDto } from '../dto/update-work-type-status.dto';
 import { CreateDepartmentDto } from '../dto/create-department.dto';
 import { UpdateDepartmentDto } from '../dto/update-department.dto';
 import { UpdateDepartmentStatusDto } from '../dto/update-department-status.dto';
+import { CreateDesignationDto } from '../dto/create-designation.dto';
+import { UpdateDesignationDto } from '../dto/update-designation.dto';
+import { UpdateDesignationStatusDto } from '../dto/update-designation-status.dto';
 
 @Injectable()
 export class OrganisationService {
@@ -211,6 +214,84 @@ export class OrganisationService {
       success: true,
       message: 'Department status updated successfully.',
       data: department,
+    };
+  }
+  async createDesignation(createDesignationDto: CreateDesignationDto) {
+    // Verify Department exists
+    await this.findDepartmentById(createDesignationDto.departmentId);
+
+    const designation =
+      await this.organisationRepository.createDesignation(createDesignationDto);
+
+    return {
+      success: true,
+      message: 'Designation created successfully.',
+      data: designation,
+    };
+  }
+  async findDesignations() {
+    const designations = await this.organisationRepository.findDesignations();
+
+    return {
+      success: true,
+      message: 'Designations fetched successfully.',
+      data: designations,
+    };
+  }
+  async findDesignationById(id: number) {
+    const designation =
+      await this.organisationRepository.findDesignationById(id);
+
+    if (!designation) {
+      throw new NotFoundException('Record not found.');
+    }
+
+    return {
+      success: true,
+      message: 'Designation fetched successfully.',
+      data: designation,
+    };
+  }
+  async updateDesignation(
+    id: number,
+    updateDesignationDto: UpdateDesignationDto,
+  ) {
+    // Verify Designation exists
+    await this.findDesignationById(id);
+
+    // If department is changing, verify it exists
+    if (updateDesignationDto.departmentId) {
+      await this.findDepartmentById(updateDesignationDto.departmentId);
+    }
+
+    const designation = await this.organisationRepository.updateDesignation(
+      id,
+      updateDesignationDto,
+    );
+
+    return {
+      success: true,
+      message: 'Designation updated successfully.',
+      data: designation,
+    };
+  }
+  async updateDesignationStatus(
+    id: number,
+    updateDesignationStatusDto: UpdateDesignationStatusDto,
+  ) {
+    // Verify Designation exists
+    await this.findDesignationById(id);
+
+    const designation =
+      await this.organisationRepository.updateDesignationStatus(
+        id,
+        updateDesignationStatusDto,
+      );
+
+    return {
+      success: true,
+      message: 'Designation status updated successfully.',
+      data: designation,
     };
   }
 }

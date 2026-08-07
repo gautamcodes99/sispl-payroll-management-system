@@ -6,21 +6,17 @@ export class EmployeeQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  page: number = 1;
+  page = 1;
 
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  limit: number = 20;
+  limit = 20;
 
   @IsOptional()
   @IsString()
   search?: string;
-
-  @IsOptional()
-  @IsString()
-  department?: string;
 
   @IsOptional()
   @IsString()
@@ -31,8 +27,16 @@ export class EmployeeQueryDto {
   status?: string;
 
   @IsOptional()
-  @IsIn(['id', 'firstName', 'lastName', 'joiningDate', 'status', 'createdAt'])
-  sortBy: string = 'id';
+  @IsIn([
+    'id',
+    'employeeCode',
+    'firstName',
+    'lastName',
+    'joiningDate',
+    'status',
+    'createdAt',
+  ])
+  sortBy = 'id';
 
   @IsOptional()
   @IsIn(['asc', 'desc'])

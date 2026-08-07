@@ -1,17 +1,21 @@
 import {
-  IsString,
-  IsEmail,
-  IsOptional,
   IsDateString,
+  IsEmail,
+  IsInt,
+  IsNotEmpty,
   IsNumber,
+  IsOptional,
+  IsString,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateEmployeeDto {
   @IsString()
+  @IsNotEmpty()
   firstName!: string;
 
   @IsString()
+  @IsNotEmpty()
   lastName!: string;
 
   @IsOptional()
@@ -22,14 +26,12 @@ export class CreateEmployeeDto {
   @IsString()
   phone?: string;
 
-  @IsString()
-  department!: string;
-
-  @IsString()
-  designation!: string;
+  @Type(() => Number)
+  @IsInt()
+  designationId!: number;
 
   @IsDateString()
-  joiningDate!: string;
+  joiningDate!: Date;
 
   @Type(() => Number)
   @IsNumber()
