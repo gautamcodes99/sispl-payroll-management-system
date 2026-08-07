@@ -2,15 +2,19 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateEmployeeDto } from '../dto/create-employee.dto';
 import { EmployeeQueryDto } from '../dto/employee-query.dto';
 import { EmployeeRepository } from '../repository/employee.repository';
-import { UpdateEmployeeDto } from '../dto/update-employee.dto';
 import { UpdateEmployeeStatusDto } from '../dto/update-employee-status.dto';
-
+import { UpdateEmployeeProfileDto } from '../dto/update-employee-profile.dto';
+import { UpdateEmployeeAddressDto } from '../dto/update-employee-address.dto';
+import { UpdateEmployeeBankDto } from '../dto/update-employee-bank.dto';
+import { UpdateEmployeeStatutoryDto } from '../dto/update-employee-statutory.dto';
+import { UpdateEmployeeNomineeDto } from '../dto/update-employee-nominee.dto';
 @Injectable()
 export class EmployeeService {
   constructor(private readonly employeeRepository: EmployeeRepository) {}
 
   async create(createEmployeeDto: CreateEmployeeDto) {
-    const employee = await this.employeeRepository.create(createEmployeeDto);
+    const employee =
+      await this.employeeRepository.createEmployee(createEmployeeDto);
 
     return {
       success: true,
@@ -20,7 +24,7 @@ export class EmployeeService {
   }
 
   async findEmployees(query: EmployeeQueryDto) {
-    const result = await this.employeeRepository.findEmployees(query);
+    const result = await this.employeeRepository.getEmployees(query);
 
     return {
       success: true,
@@ -35,7 +39,7 @@ export class EmployeeService {
     };
   }
   async findEmployeeById(id: number) {
-    const employee = await this.employeeRepository.findEmployeeById(id);
+    const employee = await this.employeeRepository.getEmployeeById(id);
 
     if (!employee) {
       throw new NotFoundException('Employee not found.');
@@ -47,23 +51,110 @@ export class EmployeeService {
       data: employee,
     };
   }
-  async updateEmployee(id: number, updateEmployeeDto: UpdateEmployeeDto) {
-    // Check if employee exists
-    const employee = await this.employeeRepository.findEmployeeById(id);
+  async updateEmployeeProfile(
+    id: number,
+    updateEmployeeProfileDto: UpdateEmployeeProfileDto,
+  ) {
+    const employee = await this.employeeRepository.getEmployeeById(id);
 
     if (!employee) {
       throw new NotFoundException('Employee not found.');
     }
 
-    // Update employee
-    const updatedEmployee = await this.employeeRepository.updateEmployee(
+    const updatedEmployee = await this.employeeRepository.updateEmployeeProfile(
       id,
-      updateEmployeeDto,
+      updateEmployeeProfileDto,
     );
 
     return {
       success: true,
-      message: 'Employee updated successfully.',
+      message: 'Employee profile updated successfully.',
+      data: updatedEmployee,
+    };
+  }
+  async updateEmployeeAddress(
+    id: number,
+    updateEmployeeAddressDto: UpdateEmployeeAddressDto,
+  ) {
+    const employee = await this.employeeRepository.getEmployeeById(id);
+
+    if (!employee) {
+      throw new NotFoundException('Employee not found.');
+    }
+
+    const updatedEmployee = await this.employeeRepository.updateEmployeeAddress(
+      id,
+      updateEmployeeAddressDto,
+    );
+
+    return {
+      success: true,
+      message: 'Employee address updated successfully.',
+      data: updatedEmployee,
+    };
+  }
+  async updateEmployeeBankDetails(
+    id: number,
+    updateEmployeeBankDto: UpdateEmployeeBankDto,
+  ) {
+    const employee = await this.employeeRepository.getEmployeeById(id);
+
+    if (!employee) {
+      throw new NotFoundException('Employee not found.');
+    }
+
+    const updatedEmployee =
+      await this.employeeRepository.updateEmployeeBankDetails(
+        id,
+        updateEmployeeBankDto,
+      );
+
+    return {
+      success: true,
+      message: 'Employee bank details updated successfully.',
+      data: updatedEmployee,
+    };
+  }
+  async updateEmployeeStatutoryDetails(
+    id: number,
+    updateEmployeeStatutoryDto: UpdateEmployeeStatutoryDto,
+  ) {
+    const employee = await this.employeeRepository.getEmployeeById(id);
+
+    if (!employee) {
+      throw new NotFoundException('Employee not found.');
+    }
+
+    const updatedEmployee =
+      await this.employeeRepository.updateEmployeeStatutoryDetails(
+        id,
+        updateEmployeeStatutoryDto,
+      );
+
+    return {
+      success: true,
+      message: 'Employee statutory details updated successfully.',
+      data: updatedEmployee,
+    };
+  }
+  async updateEmployeeNominee(
+    id: number,
+    updateEmployeeNomineeDto: UpdateEmployeeNomineeDto,
+  ) {
+    const employee = await this.employeeRepository.getEmployeeById(id);
+
+    if (!employee) {
+      throw new NotFoundException('Employee not found.');
+    }
+
+    const updatedEmployee = await this.employeeRepository.updateEmployeeNominee(
+      id,
+      updateEmployeeNomineeDto,
+    );
+
+    return {
+      success: true,
+      message: 'Employee nominee updated successfully.',
       data: updatedEmployee,
     };
   }
@@ -72,7 +163,7 @@ export class EmployeeService {
     updateEmployeeStatusDto: UpdateEmployeeStatusDto,
   ) {
     // Check if employee exists
-    const employee = await this.employeeRepository.findEmployeeById(id);
+    const employee = await this.employeeRepository.getEmployeeById(id);
 
     if (!employee) {
       throw new NotFoundException('Employee not found.');

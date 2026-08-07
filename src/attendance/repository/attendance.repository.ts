@@ -6,6 +6,7 @@ import { AttendanceQueryDto } from '../dto/attendance-query.dto';
 import { BulkAttendanceDto } from '../dto/bulk-attendance.dto';
 import { BulkOtUpdateDto } from '../dto/bulk-ot-update.dto';
 import { MonthlyAttendanceQueryDto } from '../dto/monthly-attendance-query.dto';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class AttendanceRepository {
@@ -137,7 +138,7 @@ export class AttendanceRepository {
 
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.AttendanceWhereInput = {};
 
     if (attendanceDate) {
       const date = new Date(attendanceDate);
@@ -534,7 +535,7 @@ export class AttendanceRepository {
   }
 
   async updateAttendance(id: number, updateAttendanceDto: UpdateAttendanceDto) {
-    const data: any = {};
+    const data: Prisma.AttendanceUpdateInput = {};
 
     if (updateAttendanceDto.employeeId !== undefined) {
       data.employee = {

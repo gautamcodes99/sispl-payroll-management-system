@@ -1,21 +1,113 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
 import { CreateEmployeeDto } from '../dto/create-employee.dto';
 import { EmployeeQueryDto } from '../dto/employee-query.dto';
-import { UpdateEmployeeDto } from '../dto/update-employee.dto';
 import { UpdateEmployeeStatusDto } from '../dto/update-employee-status.dto';
+import { UpdateEmployeeProfileDto } from '../dto/update-employee-profile.dto';
+import { UpdateEmployeeAddressDto } from '../dto/update-employee-address.dto';
+import { UpdateEmployeeBankDto } from '../dto/update-employee-bank.dto';
+import { UpdateEmployeeStatutoryDto } from '../dto/update-employee-statutory.dto';
+import { UpdateEmployeeNomineeDto } from '../dto/update-employee-nominee.dto';
 
 @Injectable()
 export class EmployeeRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(createEmployeeDto: CreateEmployeeDto) {
+  private readonly employeeListSelect = {
+    id: true,
+    firstName: true,
+    lastName: true,
+    phone: true,
+    email: true,
+    joiningDate: true,
+    basicSalary: true,
+    status: true,
+
+    designation: {
+      select: {
+        id: true,
+        designationName: true,
+      },
+    },
+  } satisfies Prisma.EmployeeSelect;
+
+  private readonly employeeDetailSelect = {
+    id: true,
+
+    // Personal Information
+    photo: true,
+    firstName: true,
+    lastName: true,
+    fatherName: true,
+    dateOfBirth: true,
+    gender: true,
+    phone: true,
+    email: true,
+
+    // Employment
+    joiningDate: true,
+    basicSalary: true,
+    status: true,
+
+    designation: {
+      select: {
+        id: true,
+        designationName: true,
+
+        department: {
+          select: {
+            id: true,
+            departmentName: true,
+
+            workType: {
+              select: {
+                id: true,
+                workTypeName: true,
+
+                site: {
+                  select: {
+                    id: true,
+                    siteName: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+
+    // Address
+    presentAddress: true,
+    permanentAddress: true,
+
+    // Bank Details
+    bankName: true,
+    accountHolderName: true,
+    accountNumber: true,
+    ifscCode: true,
+
+    // Statutory
+    aadhaarNumber: true,
+    panNumber: true,
+    uanNumber: true,
+    esicNumber: true,
+
+    // Nominee
+    nomineeName: true,
+    nomineeRelationship: true,
+    nomineeMobile: true,
+
+    createdAt: true,
+    updatedAt: true,
+  } satisfies Prisma.EmployeeSelect;
+
+  async createEmployee(createEmployeeDto: CreateEmployeeDto) {
     return this.prisma.employee.create({
       data: {
         firstName: createEmployeeDto.firstName,
         lastName: createEmployeeDto.lastName,
-        email: createEmployeeDto.email,
         phone: createEmployeeDto.phone,
         joiningDate: new Date(createEmployeeDto.joiningDate),
         basicSalary: createEmployeeDto.basicSalary,
@@ -26,10 +118,12 @@ export class EmployeeRepository {
           },
         },
       },
+
+      select: this.employeeDetailSelect,
     });
   }
 
-  async findEmployees(query: EmployeeQueryDto) {
+  async getEmployees(query: EmployeeQueryDto) {
     const { page, limit, search, designation, status, sortBy, order } = query;
 
     const skip = (page - 1) * limit;
@@ -83,38 +177,7 @@ export class EmployeeRepository {
         orderBy: {
           [sortBy]: order,
         },
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          joiningDate: true,
-          status: true,
-
-          designation: {
-            select: {
-              id: true,
-              designationName: true,
-              department: {
-                select: {
-                  id: true,
-                  departmentName: true,
-                  workType: {
-                    select: {
-                      id: true,
-                      workTypeName: true,
-                      site: {
-                        select: {
-                          id: true,
-                          siteName: true,
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
+        select: this.employeeListSelect,
       }),
 
       this.prisma.employee.count({
@@ -128,65 +191,26 @@ export class EmployeeRepository {
     };
   }
 
-  async findEmployeeById(id: number) {
+  async getEmployeeById(id: number) {
     return this.prisma.employee.findUnique({
       where: {
         id,
       },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        phone: true,
-        joiningDate: true,
-        basicSalary: true,
-        status: true,
-        designation: {
-          select: {
-            id: true,
-            designationName: true,
-            department: {
-              select: {
-                id: true,
-                departmentName: true,
-                workType: {
-                  select: {
-                    id: true,
-                    workTypeName: true,
-                    site: {
-                      select: {
-                        id: true,
-                        siteName: true,
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
+      select: this.employeeDetailSelect,
     });
   }
-
-  async updateEmployee(id: number, updateEmployeeDto: UpdateEmployeeDto) {
-    const { designationId, joiningDate, ...rest } = updateEmployeeDto;
+  async updateEmployeeProfile(
+    id: number,
+    updateEmployeeProfileDto: UpdateEmployeeProfileDto,
+  ) {
+    const { dateOfBirth, ...rest } = updateEmployeeProfileDto;
 
     const data: Prisma.EmployeeUpdateInput = {
       ...rest,
     };
 
-    if (joiningDate) {
-      data.joiningDate = new Date(joiningDate);
-    }
-
-    if (designationId) {
-      data.designation = {
-        connect: {
-          id: designationId,
-        },
-      };
+    if (dateOfBirth) {
+      data.dateOfBirth = new Date(dateOfBirth);
     }
 
     return this.prisma.employee.update({
@@ -194,8 +218,75 @@ export class EmployeeRepository {
         id,
       },
       data,
+      select: this.employeeDetailSelect,
     });
   }
+  async updateEmployeeAddress(
+    id: number,
+    updateEmployeeAddressDto: UpdateEmployeeAddressDto,
+  ) {
+    return this.prisma.employee.update({
+      where: {
+        id,
+      },
+      data: {
+        presentAddress: updateEmployeeAddressDto.presentAddress,
+        permanentAddress: updateEmployeeAddressDto.permanentAddress,
+      },
+      select: this.employeeDetailSelect,
+    });
+  }
+  async updateEmployeeBankDetails(
+    id: number,
+    updateEmployeeBankDto: UpdateEmployeeBankDto,
+  ) {
+    return this.prisma.employee.update({
+      where: {
+        id,
+      },
+      data: {
+        bankName: updateEmployeeBankDto.bankName,
+        accountHolderName: updateEmployeeBankDto.accountHolderName,
+        accountNumber: updateEmployeeBankDto.accountNumber,
+        ifscCode: updateEmployeeBankDto.ifscCode,
+      },
+      select: this.employeeDetailSelect,
+    });
+  }
+  async updateEmployeeStatutoryDetails(
+    id: number,
+    updateEmployeeStatutoryDto: UpdateEmployeeStatutoryDto,
+  ) {
+    return this.prisma.employee.update({
+      where: {
+        id,
+      },
+      data: {
+        aadhaarNumber: updateEmployeeStatutoryDto.aadhaarNumber,
+        panNumber: updateEmployeeStatutoryDto.panNumber,
+        uanNumber: updateEmployeeStatutoryDto.uanNumber,
+        esicNumber: updateEmployeeStatutoryDto.esicNumber,
+      },
+      select: this.employeeDetailSelect,
+    });
+  }
+  async updateEmployeeNominee(
+    id: number,
+    updateEmployeeNomineeDto: UpdateEmployeeNomineeDto,
+  ) {
+    return this.prisma.employee.update({
+      where: {
+        id,
+      },
+      data: {
+        nomineeName: updateEmployeeNomineeDto.nomineeName,
+        nomineeRelationship: updateEmployeeNomineeDto.nomineeRelationship,
+        nomineeMobile: updateEmployeeNomineeDto.nomineeMobile,
+      },
+      select: this.employeeDetailSelect,
+    });
+  }
+
   async updateEmployeeStatus(
     id: number,
     updateEmployeeStatusDto: UpdateEmployeeStatusDto,

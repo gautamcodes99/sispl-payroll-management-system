@@ -1,0 +1,18 @@
+-- AlterTable
+ALTER TABLE "public"."Employee" ADD COLUMN     "aadhaarNumber" TEXT,
+ADD COLUMN     "accountHolderName" TEXT,
+ADD COLUMN     "accountNumber" TEXT,
+ADD COLUMN     "bankName" TEXT,
+ADD COLUMN     "dateOfBirth" TIMESTAMP(3),
+ADD COLUMN     "esicNumber" TEXT,
+ADD COLUMN     "fatherName" TEXT,
+ADD COLUMN     "gender" TEXT,
+ADD COLUMN     "ifscCode" TEXT,
+ADD COLUMN     "nomineeMobile" TEXT,
+ADD COLUMN     "nomineeName" TEXT,
+ADD COLUMN     "nomineeRelationship" TEXT,
+ADD COLUMN     "panNumber" TEXT,
+ADD COLUMN     "permanentAddress" TEXT,
+ADD COLUMN     "photo" TEXT,
+ADD COLUMN     "presentAddress" TEXT,
+ADD COLUMN     "uanNumber" TEXT;

@@ -11,8 +11,12 @@ import {
 import { EmployeeService } from '../service/employee.service';
 import { CreateEmployeeDto } from '../dto/create-employee.dto';
 import { EmployeeQueryDto } from '../dto/employee-query.dto';
-import { UpdateEmployeeDto } from '../dto/update-employee.dto';
 import { UpdateEmployeeStatusDto } from '../dto/update-employee-status.dto';
+import { UpdateEmployeeProfileDto } from '../dto/update-employee-profile.dto';
+import { UpdateEmployeeAddressDto } from '../dto/update-employee-address.dto';
+import { UpdateEmployeeBankDto } from '../dto/update-employee-bank.dto';
+import { UpdateEmployeeStatutoryDto } from '../dto/update-employee-statutory.dto';
+import { UpdateEmployeeNomineeDto } from '../dto/update-employee-nominee.dto';
 
 @Controller('employees')
 export class EmployeeController {
@@ -27,12 +31,55 @@ export class EmployeeController {
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.employeeService.findEmployeeById(id);
   }
-  @Patch(':id')
-  update(
+  @Patch(':id/profile')
+  updateEmployeeProfile(
     @Param('id', ParseIntPipe) id: number,
-    @Body() updateEmployeeDto: UpdateEmployeeDto,
+    @Body() updateEmployeeProfileDto: UpdateEmployeeProfileDto,
   ) {
-    return this.employeeService.updateEmployee(id, updateEmployeeDto);
+    return this.employeeService.updateEmployeeProfile(
+      id,
+      updateEmployeeProfileDto,
+    );
+  }
+  @Patch(':id/address')
+  updateEmployeeAddress(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateEmployeeAddressDto: UpdateEmployeeAddressDto,
+  ) {
+    return this.employeeService.updateEmployeeAddress(
+      id,
+      updateEmployeeAddressDto,
+    );
+  }
+  @Patch(':id/bank-details')
+  updateEmployeeBankDetails(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateEmployeeBankDto: UpdateEmployeeBankDto,
+  ) {
+    return this.employeeService.updateEmployeeBankDetails(
+      id,
+      updateEmployeeBankDto,
+    );
+  }
+  @Patch(':id/statutory-details')
+  updateEmployeeStatutoryDetails(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateEmployeeStatutoryDto: UpdateEmployeeStatutoryDto,
+  ) {
+    return this.employeeService.updateEmployeeStatutoryDetails(
+      id,
+      updateEmployeeStatutoryDto,
+    );
+  }
+  @Patch(':id/nominee')
+  updateEmployeeNominee(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateEmployeeNomineeDto: UpdateEmployeeNomineeDto,
+  ) {
+    return this.employeeService.updateEmployeeNominee(
+      id,
+      updateEmployeeNomineeDto,
+    );
   }
   @Patch(':id/status')
   updateStatus(
