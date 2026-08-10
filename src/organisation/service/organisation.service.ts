@@ -19,6 +19,10 @@ export class OrganisationService {
     private readonly organisationRepository: OrganisationRepository,
   ) {}
 
+  // =========================================================
+  // SITE
+  // =========================================================
+
   async createSite(createSiteDto: CreateSiteDto) {
     const site = await this.organisationRepository.createSite(createSiteDto);
 
@@ -28,6 +32,7 @@ export class OrganisationService {
       data: site,
     };
   }
+
   async findSites() {
     const sites = await this.organisationRepository.findSites();
 
@@ -37,6 +42,7 @@ export class OrganisationService {
       data: sites,
     };
   }
+
   async findSiteById(id: number) {
     const site = await this.organisationRepository.findSiteById(id);
 
@@ -50,6 +56,7 @@ export class OrganisationService {
       data: site,
     };
   }
+
   async updateSite(id: number, updateSiteDto: UpdateSiteDto) {
     await this.findSiteById(id);
 
@@ -64,6 +71,7 @@ export class OrganisationService {
       data: site,
     };
   }
+
   async updateSiteStatus(id: number, updateStatusDto: UpdateStatusDto) {
     await this.findSiteById(id);
 
@@ -78,8 +86,13 @@ export class OrganisationService {
       data: site,
     };
   }
+
+  // =========================================================
+  // WORK TYPE
+  // =========================================================
+
   async createWorkType(createWorkTypeDto: CreateWorkTypeDto) {
-    // Verify the Site exists
+    // Verify Site exists
     await this.findSiteById(createWorkTypeDto.siteId);
 
     const workType =
@@ -91,6 +104,7 @@ export class OrganisationService {
       data: workType,
     };
   }
+
   async findWorkTypes() {
     const workTypes = await this.organisationRepository.findWorkTypes();
 
@@ -100,6 +114,7 @@ export class OrganisationService {
       data: workTypes,
     };
   }
+
   async findWorkTypeById(id: number) {
     const workType = await this.organisationRepository.findWorkTypeById(id);
 
@@ -109,12 +124,13 @@ export class OrganisationService {
       data: workType,
     };
   }
+
   async updateWorkType(id: number, updateWorkTypeDto: UpdateWorkTypeDto) {
     // Verify Work Type exists
     await this.organisationRepository.findWorkTypeById(id);
 
-    // Verify Site exists (only if siteId is being changed)
-    if (updateWorkTypeDto.siteId) {
+    // Verify Site exists if Site is being changed
+    if (updateWorkTypeDto.siteId !== undefined) {
       await this.findSiteById(updateWorkTypeDto.siteId);
     }
 
@@ -129,6 +145,7 @@ export class OrganisationService {
       data: workType,
     };
   }
+
   async updateWorkTypeStatus(
     id: number,
     updateWorkTypeStatusDto: UpdateWorkTypeStatusDto,
@@ -147,6 +164,11 @@ export class OrganisationService {
       data: workType,
     };
   }
+
+  // =========================================================
+  // DEPARTMENT
+  // =========================================================
+
   async createDepartment(createDepartmentDto: CreateDepartmentDto) {
     // Verify Work Type exists
     await this.findWorkTypeById(createDepartmentDto.workTypeId);
@@ -160,6 +182,7 @@ export class OrganisationService {
       data: department,
     };
   }
+
   async findDepartments() {
     const departments = await this.organisationRepository.findDepartments();
 
@@ -169,6 +192,7 @@ export class OrganisationService {
       data: departments,
     };
   }
+
   async findDepartmentById(id: number) {
     const department = await this.organisationRepository.findDepartmentById(id);
 
@@ -178,12 +202,13 @@ export class OrganisationService {
       data: department,
     };
   }
+
   async updateDepartment(id: number, updateDepartmentDto: UpdateDepartmentDto) {
     // Verify Department exists
     await this.organisationRepository.findDepartmentById(id);
 
-    // Verify Work Type exists (only if workTypeId is being changed)
-    if (updateDepartmentDto.workTypeId) {
+    // Verify Work Type exists if Work Type is being changed
+    if (updateDepartmentDto.workTypeId !== undefined) {
       await this.findWorkTypeById(updateDepartmentDto.workTypeId);
     }
 
@@ -198,6 +223,7 @@ export class OrganisationService {
       data: department,
     };
   }
+
   async updateDepartmentStatus(
     id: number,
     updateDepartmentStatusDto: UpdateDepartmentStatusDto,
@@ -216,9 +242,25 @@ export class OrganisationService {
       data: department,
     };
   }
+
+  // =========================================================
+  // DESIGNATION
+  // =========================================================
+  //
+  // Designation is a master record under Site.
+  //
+  // Initial master designations:
+  // - Unskilled
+  // - Semi Skilled
+  // - Skilled
+  // - Supervisor
+  // - Manager
+  //
+  // HR can create additional designations for a Site.
+  // =========================================================
   async createDesignation(createDesignationDto: CreateDesignationDto) {
-    // Verify Department exists
-    await this.findDepartmentById(createDesignationDto.departmentId);
+    // Verify Site exists
+    await this.findSiteById(createDesignationDto.siteId);
 
     const designation =
       await this.organisationRepository.createDesignation(createDesignationDto);
@@ -229,6 +271,7 @@ export class OrganisationService {
       data: designation,
     };
   }
+
   async findDesignations() {
     const designations = await this.organisationRepository.findDesignations();
 
@@ -238,6 +281,7 @@ export class OrganisationService {
       data: designations,
     };
   }
+
   async findDesignationById(id: number) {
     const designation =
       await this.organisationRepository.findDesignationById(id);
@@ -252,16 +296,16 @@ export class OrganisationService {
       data: designation,
     };
   }
+
   async updateDesignation(
     id: number,
     updateDesignationDto: UpdateDesignationDto,
   ) {
-    // Verify Designation exists
     await this.findDesignationById(id);
 
-    // If department is changing, verify it exists
-    if (updateDesignationDto.departmentId) {
-      await this.findDepartmentById(updateDesignationDto.departmentId);
+    // Verify Site exists only if siteId is being changed
+    if (updateDesignationDto.siteId !== undefined) {
+      await this.findSiteById(updateDesignationDto.siteId);
     }
 
     const designation = await this.organisationRepository.updateDesignation(
@@ -275,6 +319,7 @@ export class OrganisationService {
       data: designation,
     };
   }
+
   async updateDesignationStatus(
     id: number,
     updateDesignationStatusDto: UpdateDesignationStatusDto,

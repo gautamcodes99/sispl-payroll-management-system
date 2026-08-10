@@ -114,11 +114,16 @@ export class AttendanceRepository {
             id: createAttendanceDto.employeeId,
           },
         },
+
         attendanceDate: new Date(createAttendanceDto.attendanceDate),
+
         status: createAttendanceDto.status,
+
         otHours: createAttendanceDto.otHours,
+
         remarks: createAttendanceDto.remarks,
       },
+
       select: this.attendanceDetailSelect,
     });
   }
@@ -140,6 +145,9 @@ export class AttendanceRepository {
 
     const where: Prisma.AttendanceWhereInput = {};
 
+    /*
+     * Attendance Date
+     */
     if (attendanceDate) {
       const date = new Date(attendanceDate);
 
@@ -152,41 +160,75 @@ export class AttendanceRepository {
       };
     }
 
+    /*
+     * Attendance Status
+     */
     if (status) {
       where.status = status;
     }
 
+    /*
+     * Employee organisation hierarchy:
+     *
+     * Employee
+     *   └── Designation
+     *         └── Department
+     *               └── Work Type
+     *                     └── Site
+     *
+     * Therefore:
+     *
+     * designationId
+     * departmentId
+     * workTypeId
+     * siteId
+     *
+     * are all filtered through Employee -> Designation.
+     */
+
     if (designationId || departmentId || workTypeId || siteId || search) {
-      where.employee = {};
+      const employeeWhere: Prisma.EmployeeWhereInput = {};
 
-      if (designationId) {
-        where.employee.designationId = designationId;
-      }
+      /*
+       * Organisation filters
+       */
+      if (designationId || departmentId || workTypeId || siteId) {
+        const designationWhere: Prisma.DesignationWhereInput = {};
 
-      if (departmentId || workTypeId || siteId) {
-        where.employee.designation = {};
-
-        if (departmentId) {
-          where.employee.designation.departmentId = departmentId;
+        if (designationId) {
+          designationWhere.id = designationId;
         }
 
-        if (workTypeId || siteId) {
-          where.employee.designation.department = {};
+        if (departmentId || workTypeId || siteId) {
+          const departmentWhere: Prisma.DepartmentWhereInput = {};
 
-          if (workTypeId) {
-            where.employee.designation.department.workTypeId = workTypeId;
+          if (departmentId) {
+            departmentWhere.id = departmentId;
           }
 
-          if (siteId) {
-            where.employee.designation.department.workType = {
-              siteId,
-            };
+          if (workTypeId || siteId) {
+            const workTypeWhere: Prisma.WorkTypeWhereInput = {};
+
+            if (workTypeId) {
+              workTypeWhere.id = workTypeId;
+            }
+
+            if (siteId) {
+              workTypeWhere.siteId = siteId;
+            }
+
+            departmentWhere.workType = workTypeWhere;
           }
         }
+
+        employeeWhere.designation = designationWhere;
       }
 
+      /*
+       * Employee search
+       */
       if (search) {
-        where.employee.OR = [
+        employeeWhere.OR = [
           {
             firstName: {
               contains: search,
@@ -201,16 +243,22 @@ export class AttendanceRepository {
           },
         ];
       }
+
+      where.employee = employeeWhere;
     }
 
     const [attendances, total] = await Promise.all([
       this.prisma.attendance.findMany({
         where,
+
         skip,
+
         take: limit,
+
         orderBy: {
           attendanceDate: 'desc',
         },
+
         select: this.attendanceListSelect,
       }),
 
@@ -224,6 +272,7 @@ export class AttendanceRepository {
       total,
     };
   }
+
   async findPendingEmployees(attendanceDate: Date) {
     const date = new Date(attendanceDate);
 
@@ -265,24 +314,10 @@ export class AttendanceRepository {
             id: true,
             designationName: true,
 
-            department: {
+            site: {
               select: {
                 id: true,
-                departmentName: true,
-
-                workType: {
-                  select: {
-                    id: true,
-                    workTypeName: true,
-
-                    site: {
-                      select: {
-                        id: true,
-                        siteName: true,
-                      },
-                    },
-                  },
-                },
+                siteName: true,
               },
             },
           },
@@ -290,6 +325,7 @@ export class AttendanceRepository {
       },
     });
   }
+
   async getDashboardSummary(attendanceDate: Date) {
     const date = new Date(attendanceDate);
 
@@ -317,6 +353,7 @@ export class AttendanceRepository {
             gte: date,
             lt: nextDate,
           },
+
           status: 'PRESENT',
         },
       }),
@@ -327,6 +364,7 @@ export class AttendanceRepository {
             gte: date,
             lt: nextDate,
           },
+
           status: 'ABSENT',
         },
       }),
@@ -337,6 +375,7 @@ export class AttendanceRepository {
             gte: date,
             lt: nextDate,
           },
+
           status: 'LEAVE',
         },
       }),
@@ -347,6 +386,7 @@ export class AttendanceRepository {
             gte: date,
             lt: nextDate,
           },
+
           status: 'HOLIDAY',
         },
       }),
@@ -357,6 +397,7 @@ export class AttendanceRepository {
             gte: date,
             lt: nextDate,
           },
+
           status: 'WEEKLY_OFF',
         },
       }),
@@ -364,6 +405,7 @@ export class AttendanceRepository {
       this.prisma.employee.count({
         where: {
           status: 'ACTIVE',
+
           attendances: {
             none: {
               attendanceDate: {
@@ -386,14 +428,17 @@ export class AttendanceRepository {
       pending,
     };
   }
+
   async findExistingAttendance(attendanceDate: Date, employeeIds: number[]) {
     return this.prisma.attendance.findMany({
       where: {
         attendanceDate,
+
         employeeId: {
           in: employeeIds,
         },
       },
+
       select: {
         employeeId: true,
 
@@ -406,6 +451,7 @@ export class AttendanceRepository {
       },
     });
   }
+
   async bulkCreateAttendance(bulkAttendanceDto: BulkAttendanceDto) {
     const attendanceDate = new Date(bulkAttendanceDto.attendanceDate);
 
@@ -418,16 +464,22 @@ export class AttendanceRepository {
                 id: employeeId,
               },
             },
+
             attendanceDate,
+
             status: bulkAttendanceDto.status,
+
             otHours: bulkAttendanceDto.otHours,
+
             remarks: bulkAttendanceDto.remarks,
           },
+
           select: this.attendanceDetailSelect,
         }),
       ),
     );
   }
+
   async bulkUpdateOt(bulkOtUpdateDto: BulkOtUpdateDto) {
     const attendanceDate = new Date(bulkOtUpdateDto.attendanceDate);
 
@@ -436,8 +488,10 @@ export class AttendanceRepository {
         this.prisma.attendance.updateMany({
           where: {
             employeeId: employee.employeeId,
+
             attendanceDate,
           },
+
           data: {
             otHours: employee.otHours,
           },
@@ -445,6 +499,7 @@ export class AttendanceRepository {
       ),
     );
   }
+
   async getMonthlyAttendanceSummary(query: MonthlyAttendanceQueryDto) {
     const { employeeId, month, year } = query;
 
@@ -455,14 +510,17 @@ export class AttendanceRepository {
     const attendances = await this.prisma.attendance.findMany({
       where: {
         employeeId,
+
         attendanceDate: {
           gte: startDate,
           lt: endDate,
         },
       },
+
       select: {
         status: true,
         otHours: true,
+
         employee: {
           select: {
             id: true,
@@ -514,22 +572,33 @@ export class AttendanceRepository {
 
     return {
       employeeId: employee.id,
+
       employeeName: `${employee.firstName} ${employee.lastName}`,
+
       year,
+
       month,
+
       present,
+
       absent,
+
       leave,
+
       holiday,
+
       weeklyOff,
+
       otHours,
     };
   }
+
   async findAttendanceById(id: number) {
     return this.prisma.attendance.findUnique({
       where: {
         id,
       },
+
       select: this.attendanceDetailSelect,
     });
   }
@@ -565,7 +634,9 @@ export class AttendanceRepository {
       where: {
         id,
       },
+
       data,
+
       select: this.attendanceDetailSelect,
     });
   }

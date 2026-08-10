@@ -4,7 +4,7 @@ import { Type } from 'class-transformer';
 export class CreateDesignationDto {
   @Type(() => Number)
   @IsInt()
-  departmentId!: number;
+  siteId!: number;
 
   @IsString()
   @IsNotEmpty()

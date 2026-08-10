@@ -59,24 +59,10 @@ export class EmployeeRepository {
         id: true,
         designationName: true,
 
-        department: {
+        site: {
           select: {
             id: true,
-            departmentName: true,
-
-            workType: {
-              select: {
-                id: true,
-                workTypeName: true,
-
-                site: {
-                  select: {
-                    id: true,
-                    siteName: true,
-                  },
-                },
-              },
-            },
+            siteName: true,
           },
         },
       },

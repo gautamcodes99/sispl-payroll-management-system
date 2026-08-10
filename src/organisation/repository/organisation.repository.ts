@@ -17,6 +17,10 @@ import { UpdateDesignationStatusDto } from '../dto/update-designation-status.dto
 export class OrganisationRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  // =========================================================
+  // SITE
+  // =========================================================
+
   async createSite(createSiteDto: CreateSiteDto) {
     const site = await this.prisma.site.create({
       data: createSiteDto,
@@ -24,6 +28,7 @@ export class OrganisationRepository {
 
     return site;
   }
+
   async findSites() {
     return this.prisma.site.findMany({
       orderBy: {
@@ -31,6 +36,7 @@ export class OrganisationRepository {
       },
     });
   }
+
   async findSiteById(id: number) {
     return this.prisma.site.findUnique({
       where: {
@@ -38,6 +44,7 @@ export class OrganisationRepository {
       },
     });
   }
+
   async updateSite(id: number, updateSiteDto: UpdateSiteDto) {
     return this.prisma.site.update({
       where: {
@@ -46,6 +53,7 @@ export class OrganisationRepository {
       data: updateSiteDto,
     });
   }
+
   async updateSiteStatus(id: number, status: Status) {
     return this.prisma.site.update({
       where: {
@@ -56,11 +64,17 @@ export class OrganisationRepository {
       },
     });
   }
+
+  // =========================================================
+  // WORK TYPE
+  // =========================================================
+
   async createWorkType(createWorkTypeDto: CreateWorkTypeDto) {
     return this.prisma.workType.create({
       data: createWorkTypeDto,
     });
   }
+
   async findWorkTypes() {
     return this.prisma.workType.findMany({
       include: {
@@ -83,6 +97,7 @@ export class OrganisationRepository {
       ],
     });
   }
+
   async findWorkTypeById(id: number) {
     return this.prisma.workType.findUniqueOrThrow({
       where: {
@@ -98,6 +113,7 @@ export class OrganisationRepository {
       },
     });
   }
+
   async updateWorkType(id: number, updateWorkTypeDto: UpdateWorkTypeDto) {
     return this.prisma.workType.update({
       where: {
@@ -106,6 +122,7 @@ export class OrganisationRepository {
       data: updateWorkTypeDto,
     });
   }
+
   async updateWorkTypeStatus(
     id: number,
     updateWorkTypeStatusDto: UpdateWorkTypeStatusDto,
@@ -119,11 +136,17 @@ export class OrganisationRepository {
       },
     });
   }
+
+  // =========================================================
+  // DEPARTMENT
+  // =========================================================
+
   async createDepartment(createDepartmentDto: CreateDepartmentDto) {
     return this.prisma.department.create({
       data: createDepartmentDto,
     });
   }
+
   async findDepartments() {
     return this.prisma.department.findMany({
       include: {
@@ -159,6 +182,7 @@ export class OrganisationRepository {
       ],
     });
   }
+
   async findDepartmentById(id: number) {
     return this.prisma.department.findUniqueOrThrow({
       where: {
@@ -180,6 +204,7 @@ export class OrganisationRepository {
       },
     });
   }
+
   async updateDepartment(id: number, updateDepartmentDto: UpdateDepartmentDto) {
     return this.prisma.department.update({
       where: {
@@ -188,6 +213,7 @@ export class OrganisationRepository {
       data: updateDepartmentDto,
     });
   }
+
   async updateDepartmentStatus(
     id: number,
     updateDepartmentStatusDto: UpdateDepartmentStatusDto,
@@ -201,55 +227,43 @@ export class OrganisationRepository {
       },
     });
   }
+
+  // =========================================================
+  // DESIGNATION
+  // =========================================================
+  //
+  // Designation is a master record under Site.
+  //
+  // Initial master designations:
+  // - Unskilled
+  // - Semi Skilled
+  // - Skilled
+  // - Supervisor
+  // - Manager
+  //
+  // A Site can have its own designation records.
+  // =========================================================
+
   async createDesignation(createDesignationDto: CreateDesignationDto) {
-    const designation = await this.prisma.designation.create({
+    return this.prisma.designation.create({
       data: createDesignationDto,
     });
-
-    return designation;
   }
+
   async findDesignations() {
     return this.prisma.designation.findMany({
       include: {
-        department: {
+        site: {
           select: {
             id: true,
-            departmentName: true,
-            workType: {
-              select: {
-                id: true,
-                workTypeName: true,
-                site: {
-                  select: {
-                    id: true,
-                    siteName: true,
-                  },
-                },
-              },
-            },
+            siteName: true,
           },
         },
       },
       orderBy: [
         {
-          department: {
-            workType: {
-              site: {
-                siteName: 'asc',
-              },
-            },
-          },
-        },
-        {
-          department: {
-            workType: {
-              workTypeName: 'asc',
-            },
-          },
-        },
-        {
-          department: {
-            departmentName: 'asc',
+          site: {
+            siteName: 'asc',
           },
         },
         {
@@ -258,33 +272,23 @@ export class OrganisationRepository {
       ],
     });
   }
+
   async findDesignationById(id: number) {
     return this.prisma.designation.findUnique({
       where: {
         id,
       },
       include: {
-        department: {
+        site: {
           select: {
             id: true,
-            departmentName: true,
-            workType: {
-              select: {
-                id: true,
-                workTypeName: true,
-                site: {
-                  select: {
-                    id: true,
-                    siteName: true,
-                  },
-                },
-              },
-            },
+            siteName: true,
           },
         },
       },
     });
   }
+
   async updateDesignation(
     id: number,
     updateDesignationDto: UpdateDesignationDto,
@@ -294,8 +298,17 @@ export class OrganisationRepository {
         id,
       },
       data: updateDesignationDto,
+      include: {
+        site: {
+          select: {
+            id: true,
+            siteName: true,
+          },
+        },
+      },
     });
   }
+
   async updateDesignationStatus(
     id: number,
     updateDesignationStatusDto: UpdateDesignationStatusDto,

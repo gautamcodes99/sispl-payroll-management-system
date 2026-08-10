@@ -8,167 +8,149 @@ datasource db {
 }
 
 model Employee {
-  id                    Int          @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
   // Personal Information
-  photo                 String?
+  photo String?
 
-  firstName             String
-  lastName              String
-  fatherName            String?
+  firstName  String
+  lastName   String
+  fatherName String?
 
-  dateOfBirth           DateTime?
+  dateOfBirth DateTime?
+  gender      String?
 
-  gender                String?
-
-  email                 String?      @unique
-  phone                 String?
+  email String? @unique
+  phone String?
 
   // Employment
-  designationId         Int
-  designation           Designation  @relation(fields: [designationId], references: [id], onDelete: Restrict)
+  designationId Int
+  designation   Designation @relation(fields: [designationId], references: [id], onDelete: Restrict)
 
-  joiningDate           DateTime
+  joiningDate DateTime
+  basicSalary Decimal
+  status      String   @default("ACTIVE")
 
-  basicSalary           Decimal
+  leftReason String?
+  leftDate   DateTime?
 
-  status                String       @default("ACTIVE")
-
-  leftReason            String?
-  leftDate              DateTime?
-
-// Address
-  presentAddress        String?
-
-  permanentAddress      String?
+  // Address
+  presentAddress   String?
+  permanentAddress String?
 
   // Bank Details
-  bankName              String?
-
-  accountHolderName     String?
-
-  accountNumber         String?
-
-  ifscCode              String?
+  bankName          String?
+  accountHolderName String?
+  accountNumber     String?
+  ifscCode          String?
 
   // Statutory Details
-  aadhaarNumber         String?
-
-  panNumber             String?
-
-  uanNumber             String?
-
-  esicNumber            String?
+  aadhaarNumber String?
+  panNumber     String?
+  uanNumber     String?
+  esicNumber    String?
 
   // Nominee
-  nomineeName           String?
-
-  nomineeRelationship   String?
-
-  nomineeMobile         String?
+  nomineeName         String?
+  nomineeRelationship String?
+  nomineeMobile       String?
 
   // Relations
-  attendances           Attendance[]
+  attendances Attendance[]
 
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
+
 model Site {
-  id              Int        @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
-  siteName        String
+  siteName String
 
-  address         String?
+  address       String?
+  city          String?
+  state         String?
+  pinCode       String?
+  contactPerson String?
+  contactNumber String?
 
-  city            String?
+  status String @default("ACTIVE")
 
-  state           String?
+  workTypes    WorkType[]
+  designations Designation[]
 
-  pinCode         String?
-
-  contactPerson   String?
-
-  contactNumber   String?
-
-  status     String   @default("ACTIVE")
-
-  workTypes       WorkType[]
-
-  createdAt       DateTime   @default(now())
-
-  updatedAt       DateTime   @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
+
 model WorkType {
-  id            Int          @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
-  siteId        Int
-  site          Site         @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  siteId Int
+  site   Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
-  workTypeName  String
+  workTypeName String
+  status       String @default("ACTIVE")
 
-  status        String       @default("ACTIVE")
+  departments Department[]
 
-  departments   Department[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  createdAt     DateTime     @default(now())
-
-  updatedAt     DateTime     @updatedAt
   @@unique([siteId, workTypeName])
 }
+
 model Department {
-  id               Int        @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
-  workTypeId       Int
-  workType         WorkType   @relation(fields: [workTypeId], references: [id], onDelete: Cascade)
+  workTypeId Int
+  workType   WorkType @relation(fields: [workTypeId], references: [id], onDelete: Cascade)
 
-  departmentName   String
+  departmentName String
+  status         String @default("ACTIVE")
 
-  status           String     @default("ACTIVE")
-
-  designations     Designation[]
-
-  createdAt        DateTime   @default(now())
-
-  updatedAt        DateTime   @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([workTypeId, departmentName])
 }
+
 model Designation {
-  id               Int          @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
-  departmentId     Int
-  department       Department   @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  siteId Int
+  site   Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
-  designationName  String
+  designationName String
 
-  status           String       @default("ACTIVE")
+  status String @default("ACTIVE")
 
-  employees        Employee[]
+  employees Employee[]
 
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  @@unique([departmentId, designationName])
+  @@unique([siteId, designationName])
 }
-model Attendance {
-  id             Int               @id @default(autoincrement())
 
-  employeeId     Int
-  employee       Employee          @relation(fields: [employeeId], references: [id])
+model Attendance {
+  id Int @id @default(autoincrement())
+
+  employeeId Int
+  employee   Employee @relation(fields: [employeeId], references: [id])
 
   attendanceDate DateTime
-
   status         AttendanceStatus
 
-  otHours        Decimal           @default(0) @db.Decimal(5,2)
+  otHours Decimal @default(0) @db.Decimal(5, 2)
+  remarks String?
 
-  remarks        String?
-
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([employeeId, attendanceDate])
 }
+
 enum AttendanceStatus {
   PRESENT
   ABSENT
