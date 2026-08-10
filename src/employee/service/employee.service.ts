@@ -1,13 +1,20 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+
 import { CreateEmployeeDto } from '../dto/create-employee.dto';
 import { EmployeeQueryDto } from '../dto/employee-query.dto';
 import { EmployeeRepository } from '../repository/employee.repository';
+
 import { UpdateEmployeeStatusDto } from '../dto/update-employee-status.dto';
 import { UpdateEmployeeProfileDto } from '../dto/update-employee-profile.dto';
 import { UpdateEmployeeAddressDto } from '../dto/update-employee-address.dto';
 import { UpdateEmployeeBankDto } from '../dto/update-employee-bank.dto';
 import { UpdateEmployeeStatutoryDto } from '../dto/update-employee-statutory.dto';
 import { UpdateEmployeeNomineeDto } from '../dto/update-employee-nominee.dto';
+
 @Injectable()
 export class EmployeeService {
   constructor(private readonly employeeRepository: EmployeeRepository) {}
@@ -38,6 +45,7 @@ export class EmployeeService {
       },
     };
   }
+
   async findEmployeeById(id: number) {
     const employee = await this.employeeRepository.getEmployeeById(id);
 
@@ -51,6 +59,7 @@ export class EmployeeService {
       data: employee,
     };
   }
+
   async updateEmployeeProfile(
     id: number,
     updateEmployeeProfileDto: UpdateEmployeeProfileDto,
@@ -72,6 +81,7 @@ export class EmployeeService {
       data: updatedEmployee,
     };
   }
+
   async updateEmployeeAddress(
     id: number,
     updateEmployeeAddressDto: UpdateEmployeeAddressDto,
@@ -93,6 +103,7 @@ export class EmployeeService {
       data: updatedEmployee,
     };
   }
+
   async updateEmployeeBankDetails(
     id: number,
     updateEmployeeBankDto: UpdateEmployeeBankDto,
@@ -115,6 +126,7 @@ export class EmployeeService {
       data: updatedEmployee,
     };
   }
+
   async updateEmployeeStatutoryDetails(
     id: number,
     updateEmployeeStatutoryDto: UpdateEmployeeStatutoryDto,
@@ -137,6 +149,7 @@ export class EmployeeService {
       data: updatedEmployee,
     };
   }
+
   async updateEmployeeNominee(
     id: number,
     updateEmployeeNomineeDto: UpdateEmployeeNomineeDto,
@@ -158,15 +171,31 @@ export class EmployeeService {
       data: updatedEmployee,
     };
   }
+
   async updateEmployeeStatus(
     id: number,
     updateEmployeeStatusDto: UpdateEmployeeStatusDto,
   ) {
-    // Check if employee exists
     const employee = await this.employeeRepository.getEmployeeById(id);
 
     if (!employee) {
       throw new NotFoundException('Employee not found.');
+    }
+
+    const { status, leftReason, leftDate } = updateEmployeeStatusDto;
+
+    if (status === 'INACTIVE') {
+      if (!leftReason?.trim()) {
+        throw new BadRequestException(
+          'Reason of leaving is required when an employee is made inactive.',
+        );
+      }
+
+      if (!leftDate) {
+        throw new BadRequestException(
+          'Date of leaving is required when an employee is made inactive.',
+        );
+      }
     }
 
     const updatedEmployee = await this.employeeRepository.updateEmployeeStatus(

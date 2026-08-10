@@ -8,7 +8,9 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+
 import { EmployeeService } from '../service/employee.service';
+
 import { CreateEmployeeDto } from '../dto/create-employee.dto';
 import { EmployeeQueryDto } from '../dto/employee-query.dto';
 import { UpdateEmployeeStatusDto } from '../dto/update-employee-status.dto';
@@ -31,60 +33,72 @@ export class EmployeeController {
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.employeeService.findEmployeeById(id);
   }
+
   @Patch(':id/profile')
   updateEmployeeProfile(
     @Param('id', ParseIntPipe) id: number,
-    @Body() updateEmployeeProfileDto: UpdateEmployeeProfileDto,
+    @Body()
+    updateEmployeeProfileDto: UpdateEmployeeProfileDto,
   ) {
     return this.employeeService.updateEmployeeProfile(
       id,
       updateEmployeeProfileDto,
     );
   }
+
   @Patch(':id/address')
   updateEmployeeAddress(
     @Param('id', ParseIntPipe) id: number,
-    @Body() updateEmployeeAddressDto: UpdateEmployeeAddressDto,
+    @Body()
+    updateEmployeeAddressDto: UpdateEmployeeAddressDto,
   ) {
     return this.employeeService.updateEmployeeAddress(
       id,
       updateEmployeeAddressDto,
     );
   }
+
   @Patch(':id/bank-details')
   updateEmployeeBankDetails(
     @Param('id', ParseIntPipe) id: number,
-    @Body() updateEmployeeBankDto: UpdateEmployeeBankDto,
+    @Body()
+    updateEmployeeBankDto: UpdateEmployeeBankDto,
   ) {
     return this.employeeService.updateEmployeeBankDetails(
       id,
       updateEmployeeBankDto,
     );
   }
+
   @Patch(':id/statutory-details')
   updateEmployeeStatutoryDetails(
     @Param('id', ParseIntPipe) id: number,
-    @Body() updateEmployeeStatutoryDto: UpdateEmployeeStatutoryDto,
+    @Body()
+    updateEmployeeStatutoryDto: UpdateEmployeeStatutoryDto,
   ) {
     return this.employeeService.updateEmployeeStatutoryDetails(
       id,
       updateEmployeeStatutoryDto,
     );
   }
+
   @Patch(':id/nominee')
   updateEmployeeNominee(
     @Param('id', ParseIntPipe) id: number,
-    @Body() updateEmployeeNomineeDto: UpdateEmployeeNomineeDto,
+    @Body()
+    updateEmployeeNomineeDto: UpdateEmployeeNomineeDto,
   ) {
     return this.employeeService.updateEmployeeNominee(
       id,
       updateEmployeeNomineeDto,
     );
   }
+
   @Patch(':id/status')
   updateStatus(
     @Param('id', ParseIntPipe) id: number,
-    @Body() updateEmployeeStatusDto: UpdateEmployeeStatusDto,
+    @Body()
+    updateEmployeeStatusDto: UpdateEmployeeStatusDto,
   ) {
     return this.employeeService.updateEmployeeStatus(
       id,

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+
 import { CreateEmployeeDto } from '../dto/create-employee.dto';
 import { EmployeeQueryDto } from '../dto/employee-query.dto';
 import { UpdateEmployeeStatusDto } from '../dto/update-employee-status.dto';
@@ -49,6 +50,8 @@ export class EmployeeRepository {
     joiningDate: true,
     basicSalary: true,
     status: true,
+    leftReason: true,
+    leftDate: true,
 
     designation: {
       select: {
@@ -199,6 +202,7 @@ export class EmployeeRepository {
       select: this.employeeDetailSelect,
     });
   }
+
   async updateEmployeeProfile(
     id: number,
     updateEmployeeProfileDto: UpdateEmployeeProfileDto,
@@ -221,6 +225,7 @@ export class EmployeeRepository {
       select: this.employeeDetailSelect,
     });
   }
+
   async updateEmployeeAddress(
     id: number,
     updateEmployeeAddressDto: UpdateEmployeeAddressDto,
@@ -231,11 +236,13 @@ export class EmployeeRepository {
       },
       data: {
         presentAddress: updateEmployeeAddressDto.presentAddress,
+
         permanentAddress: updateEmployeeAddressDto.permanentAddress,
       },
       select: this.employeeDetailSelect,
     });
   }
+
   async updateEmployeeBankDetails(
     id: number,
     updateEmployeeBankDto: UpdateEmployeeBankDto,
@@ -246,13 +253,17 @@ export class EmployeeRepository {
       },
       data: {
         bankName: updateEmployeeBankDto.bankName,
+
         accountHolderName: updateEmployeeBankDto.accountHolderName,
+
         accountNumber: updateEmployeeBankDto.accountNumber,
+
         ifscCode: updateEmployeeBankDto.ifscCode,
       },
       select: this.employeeDetailSelect,
     });
   }
+
   async updateEmployeeStatutoryDetails(
     id: number,
     updateEmployeeStatutoryDto: UpdateEmployeeStatutoryDto,
@@ -263,13 +274,17 @@ export class EmployeeRepository {
       },
       data: {
         aadhaarNumber: updateEmployeeStatutoryDto.aadhaarNumber,
+
         panNumber: updateEmployeeStatutoryDto.panNumber,
+
         uanNumber: updateEmployeeStatutoryDto.uanNumber,
+
         esicNumber: updateEmployeeStatutoryDto.esicNumber,
       },
       select: this.employeeDetailSelect,
     });
   }
+
   async updateEmployeeNominee(
     id: number,
     updateEmployeeNomineeDto: UpdateEmployeeNomineeDto,
@@ -280,7 +295,9 @@ export class EmployeeRepository {
       },
       data: {
         nomineeName: updateEmployeeNomineeDto.nomineeName,
+
         nomineeRelationship: updateEmployeeNomineeDto.nomineeRelationship,
+
         nomineeMobile: updateEmployeeNomineeDto.nomineeMobile,
       },
       select: this.employeeDetailSelect,
@@ -291,18 +308,33 @@ export class EmployeeRepository {
     id: number,
     updateEmployeeStatusDto: UpdateEmployeeStatusDto,
   ) {
+    const { status, leftReason, leftDate } = updateEmployeeStatusDto;
+
     return this.prisma.employee.update({
       where: {
         id,
       },
+
       data: {
-        status: updateEmployeeStatusDto.status,
+        status,
+
+        /*
+         * When employee becomes ACTIVE again,
+         * clear previous leaving information.
+         */
+        leftReason: status === 'ACTIVE' ? null : leftReason?.trim() || null,
+
+        leftDate:
+          status === 'ACTIVE' ? null : leftDate ? new Date(leftDate) : null,
       },
+
       select: {
         id: true,
         firstName: true,
         lastName: true,
         status: true,
+        leftReason: true,
+        leftDate: true,
       },
     });
   }

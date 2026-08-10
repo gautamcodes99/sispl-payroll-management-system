@@ -29,6 +29,10 @@ export class OrganisationController {
   createSite(@Body() createSiteDto: CreateSiteDto) {
     return this.organisationService.createSite(createSiteDto);
   }
+  @Get('sites')
+  findSites() {
+    return this.organisationService.findSites();
+  }
   @Get('sites/:id')
   findSiteById(@Param('id', ParseIntPipe) id: number) {
     return this.organisationService.findSiteById(id);
