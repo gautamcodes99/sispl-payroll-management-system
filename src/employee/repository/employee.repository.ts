@@ -6,6 +6,7 @@ import { CreateEmployeeDto } from '../dto/create-employee.dto';
 import { EmployeeQueryDto } from '../dto/employee-query.dto';
 import { UpdateEmployeeStatusDto } from '../dto/update-employee-status.dto';
 import { UpdateEmployeeProfileDto } from '../dto/update-employee-profile.dto';
+import { UpdateEmployeeEmploymentDto } from '../dto/update-employee-employment.dto';
 import { UpdateEmployeeAddressDto } from '../dto/update-employee-address.dto';
 import { UpdateEmployeeBankDto } from '../dto/update-employee-bank.dto';
 import { UpdateEmployeeStatutoryDto } from '../dto/update-employee-statutory.dto';
@@ -226,6 +227,33 @@ export class EmployeeRepository {
     });
   }
 
+  async updateEmployeeEmployment(
+    id: number,
+    updateEmployeeEmploymentDto: UpdateEmployeeEmploymentDto,
+  ) {
+    const { designationId, joiningDate, basicSalary } =
+      updateEmployeeEmploymentDto;
+
+    return this.prisma.employee.update({
+      where: {
+        id,
+      },
+
+      data: {
+        joiningDate: new Date(joiningDate),
+        basicSalary,
+
+        designation: {
+          connect: {
+            id: designationId,
+          },
+        },
+      },
+
+      select: this.employeeDetailSelect,
+    });
+  }
+
   async updateEmployeeAddress(
     id: number,
     updateEmployeeAddressDto: UpdateEmployeeAddressDto,
@@ -234,11 +262,12 @@ export class EmployeeRepository {
       where: {
         id,
       },
+
       data: {
         presentAddress: updateEmployeeAddressDto.presentAddress,
-
         permanentAddress: updateEmployeeAddressDto.permanentAddress,
       },
+
       select: this.employeeDetailSelect,
     });
   }
@@ -251,15 +280,14 @@ export class EmployeeRepository {
       where: {
         id,
       },
+
       data: {
         bankName: updateEmployeeBankDto.bankName,
-
         accountHolderName: updateEmployeeBankDto.accountHolderName,
-
         accountNumber: updateEmployeeBankDto.accountNumber,
-
         ifscCode: updateEmployeeBankDto.ifscCode,
       },
+
       select: this.employeeDetailSelect,
     });
   }
@@ -272,15 +300,14 @@ export class EmployeeRepository {
       where: {
         id,
       },
+
       data: {
         aadhaarNumber: updateEmployeeStatutoryDto.aadhaarNumber,
-
         panNumber: updateEmployeeStatutoryDto.panNumber,
-
         uanNumber: updateEmployeeStatutoryDto.uanNumber,
-
         esicNumber: updateEmployeeStatutoryDto.esicNumber,
       },
+
       select: this.employeeDetailSelect,
     });
   }
@@ -293,13 +320,13 @@ export class EmployeeRepository {
       where: {
         id,
       },
+
       data: {
         nomineeName: updateEmployeeNomineeDto.nomineeName,
-
         nomineeRelationship: updateEmployeeNomineeDto.nomineeRelationship,
-
         nomineeMobile: updateEmployeeNomineeDto.nomineeMobile,
       },
+
       select: this.employeeDetailSelect,
     });
   }

@@ -14,10 +14,15 @@ import { UpdateEmployeeAddressDto } from '../dto/update-employee-address.dto';
 import { UpdateEmployeeBankDto } from '../dto/update-employee-bank.dto';
 import { UpdateEmployeeStatutoryDto } from '../dto/update-employee-statutory.dto';
 import { UpdateEmployeeNomineeDto } from '../dto/update-employee-nominee.dto';
+import { UpdateEmployeeEmploymentDto } from '../dto/update-employee-employment.dto';
 
 @Injectable()
 export class EmployeeService {
   constructor(private readonly employeeRepository: EmployeeRepository) {}
+
+  // =========================================================
+  // CREATE
+  // =========================================================
 
   async create(createEmployeeDto: CreateEmployeeDto) {
     const employee =
@@ -29,6 +34,10 @@ export class EmployeeService {
       data: employee,
     };
   }
+
+  // =========================================================
+  // LIST
+  // =========================================================
 
   async findEmployees(query: EmployeeQueryDto) {
     const result = await this.employeeRepository.getEmployees(query);
@@ -46,6 +55,10 @@ export class EmployeeService {
     };
   }
 
+  // =========================================================
+  // DETAIL
+  // =========================================================
+
   async findEmployeeById(id: number) {
     const employee = await this.employeeRepository.getEmployeeById(id);
 
@@ -59,6 +72,10 @@ export class EmployeeService {
       data: employee,
     };
   }
+
+  // =========================================================
+  // PROFILE
+  // =========================================================
 
   async updateEmployeeProfile(
     id: number,
@@ -82,6 +99,67 @@ export class EmployeeService {
     };
   }
 
+  // =========================================================
+  // EMPLOYMENT
+  //
+  // Locked fields:
+  // - Designation
+  // - Joining Date
+  // - Basic Salary
+  //
+  // Site / Work Type / Department are NOT employee fields here.
+  // =========================================================
+
+  async updateEmployeeEmployment(
+    id: number,
+    updateEmployeeEmploymentDto: UpdateEmployeeEmploymentDto,
+  ) {
+    const employee = await this.employeeRepository.getEmployeeById(id);
+
+    if (!employee) {
+      throw new NotFoundException('Employee not found.');
+    }
+
+    const { designationId, joiningDate, basicSalary } =
+      updateEmployeeEmploymentDto;
+
+    if (!Number.isInteger(designationId) || designationId <= 0) {
+      throw new BadRequestException('A valid designation is required.');
+    }
+
+    if (!joiningDate) {
+      throw new BadRequestException('Joining date is required.');
+    }
+
+    const parsedJoiningDate = new Date(joiningDate);
+
+    if (Number.isNaN(parsedJoiningDate.getTime())) {
+      throw new BadRequestException('Please enter a valid joining date.');
+    }
+
+    const salary = Number(basicSalary);
+
+    if (!Number.isFinite(salary) || salary < 0) {
+      throw new BadRequestException('Please enter a valid basic salary.');
+    }
+
+    const updatedEmployee =
+      await this.employeeRepository.updateEmployeeEmployment(
+        id,
+        updateEmployeeEmploymentDto,
+      );
+
+    return {
+      success: true,
+      message: 'Employee employment details updated successfully.',
+      data: updatedEmployee,
+    };
+  }
+
+  // =========================================================
+  // ADDRESS
+  // =========================================================
+
   async updateEmployeeAddress(
     id: number,
     updateEmployeeAddressDto: UpdateEmployeeAddressDto,
@@ -103,6 +181,10 @@ export class EmployeeService {
       data: updatedEmployee,
     };
   }
+
+  // =========================================================
+  // BANK DETAILS
+  // =========================================================
 
   async updateEmployeeBankDetails(
     id: number,
@@ -127,6 +209,10 @@ export class EmployeeService {
     };
   }
 
+  // =========================================================
+  // STATUTORY DETAILS
+  // =========================================================
+
   async updateEmployeeStatutoryDetails(
     id: number,
     updateEmployeeStatutoryDto: UpdateEmployeeStatutoryDto,
@@ -150,6 +236,10 @@ export class EmployeeService {
     };
   }
 
+  // =========================================================
+  // NOMINEE
+  // =========================================================
+
   async updateEmployeeNominee(
     id: number,
     updateEmployeeNomineeDto: UpdateEmployeeNomineeDto,
@@ -171,6 +261,10 @@ export class EmployeeService {
       data: updatedEmployee,
     };
   }
+
+  // =========================================================
+  // STATUS
+  // =========================================================
 
   async updateEmployeeStatus(
     id: number,
