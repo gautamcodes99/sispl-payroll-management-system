@@ -7,7 +7,7 @@ import {
   IsString,
   Min,
 } from 'class-validator';
-import { AttendanceStatus } from '@prisma/client';
+import { AttendanceShift, AttendanceStatus } from '@prisma/client';
 
 export class AttendanceQueryDto {
   @IsOptional()
@@ -49,6 +49,10 @@ export class AttendanceQueryDto {
   @Type(() => Number)
   @IsInt()
   designationId?: number;
+
+  @IsOptional()
+  @IsEnum(AttendanceShift)
+  shift?: AttendanceShift;
 
   @IsOptional()
   @IsString()

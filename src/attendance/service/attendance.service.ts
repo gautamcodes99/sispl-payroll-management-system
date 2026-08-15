@@ -67,17 +67,20 @@ export class AttendanceService {
       await this.attendanceRepository.findExistingAttendance(
         new Date(bulkAttendanceDto.attendanceDate),
         bulkAttendanceDto.employeeIds,
+        bulkAttendanceDto.shift,
       );
 
     if (existingAttendances.length > 0) {
       return {
         success: false,
-        message: 'Attendance already exists for the selected employee(s).',
+        message:
+          'Attendance already exists for the selected employee(s) and shift.',
         data: {
           duplicates: existingAttendances.map((attendance) => ({
             employeeId: attendance.employeeId,
             firstName: attendance.employee.firstName,
             lastName: attendance.employee.lastName,
+            shift: attendance.shift,
           })),
         },
       };

@@ -8,7 +8,7 @@ import {
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { AttendanceStatus } from '@prisma/client';
+import { AttendanceShift, AttendanceStatus } from '@prisma/client';
 
 export class CreateAttendanceDto {
   @Type(() => Number)
@@ -20,6 +20,9 @@ export class CreateAttendanceDto {
 
   @IsEnum(AttendanceStatus)
   status!: AttendanceStatus;
+
+  @IsEnum(AttendanceShift)
+  shift!: AttendanceShift;
 
   @Type(() => Number)
   @IsNumber()

@@ -16,6 +16,10 @@ import { UpdateEmployeeNomineeDto } from '../dto/update-employee-nominee.dto';
 export class EmployeeRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  // =========================================================
+  // EMPLOYEE LIST SELECT
+  // =========================================================
+
   private readonly employeeListSelect = {
     id: true,
     firstName: true,
@@ -33,6 +37,10 @@ export class EmployeeRepository {
       },
     },
   } satisfies Prisma.EmployeeSelect;
+
+  // =========================================================
+  // EMPLOYEE DETAIL SELECT
+  // =========================================================
 
   private readonly employeeDetailSelect = {
     id: true,
@@ -93,6 +101,10 @@ export class EmployeeRepository {
     updatedAt: true,
   } satisfies Prisma.EmployeeSelect;
 
+  // =========================================================
+  // CREATE EMPLOYEE
+  // =========================================================
+
   async createEmployee(createEmployeeDto: CreateEmployeeDto) {
     return this.prisma.employee.create({
       data: {
@@ -113,6 +125,10 @@ export class EmployeeRepository {
     });
   }
 
+  // =========================================================
+  // GET EMPLOYEES
+  // =========================================================
+
   async getEmployees(query: EmployeeQueryDto) {
     const { page, limit, search, designation, status, sortBy, order } = query;
 
@@ -120,53 +136,107 @@ export class EmployeeRepository {
 
     const where: Prisma.EmployeeWhereInput = {};
 
+    // =======================================================
+    // DESIGNATION FILTER
+    // =======================================================
+
     if (designation) {
       where.designation = {
         designationName: designation,
       };
     }
 
+    // =======================================================
+    // STATUS FILTER
+    // =======================================================
+
     if (status) {
       where.status = status;
     }
 
-    if (search) {
-      where.OR = [
+    // =======================================================
+    // EMPLOYEE SEARCH
+    //
+    // Supports:
+    //
+    // 1. Employee ID
+    // 2. First Name
+    // 3. Last Name
+    // 4. Email
+    // 5. Phone
+    //
+    // This is required by the Attendance employee search:
+    //
+    // "Search employee by ID or name"
+    // =======================================================
+
+    if (search?.trim()) {
+      const normalizedSearch = search.trim();
+
+      const searchConditions: Prisma.EmployeeWhereInput[] = [
         {
           firstName: {
-            contains: search,
+            contains: normalizedSearch,
             mode: 'insensitive',
           },
         },
+
         {
           lastName: {
-            contains: search,
+            contains: normalizedSearch,
             mode: 'insensitive',
           },
         },
+
         {
           email: {
-            contains: search,
+            contains: normalizedSearch,
             mode: 'insensitive',
           },
         },
+
         {
           phone: {
-            contains: search,
+            contains: normalizedSearch,
             mode: 'insensitive',
           },
         },
       ];
+
+      // -----------------------------------------------------
+      // NUMERIC EMPLOYEE ID SEARCH
+      //
+      // Prisma Employee.id is an integer.
+      //
+      // Only add the ID condition when the search contains
+      // only numeric characters.
+      // -----------------------------------------------------
+
+      if (/^\d+$/.test(normalizedSearch)) {
+        searchConditions.unshift({
+          id: Number(normalizedSearch),
+        });
+      }
+
+      where.OR = searchConditions;
     }
+
+    // =======================================================
+    // DATABASE QUERY
+    // =======================================================
 
     const [employees, total] = await Promise.all([
       this.prisma.employee.findMany({
         where,
+
         skip,
+
         take: limit,
+
         orderBy: {
           [sortBy]: order,
         },
+
         select: this.employeeListSelect,
       }),
 
@@ -181,14 +251,23 @@ export class EmployeeRepository {
     };
   }
 
+  // =========================================================
+  // GET EMPLOYEE BY ID
+  // =========================================================
+
   async getEmployeeById(id: number) {
     return this.prisma.employee.findUnique({
       where: {
         id,
       },
+
       select: this.employeeDetailSelect,
     });
   }
+
+  // =========================================================
+  // UPDATE EMPLOYEE PROFILE
+  // =========================================================
 
   async updateEmployeeProfile(
     id: number,
@@ -208,10 +287,16 @@ export class EmployeeRepository {
       where: {
         id,
       },
+
       data,
+
       select: this.employeeDetailSelect,
     });
   }
+
+  // =========================================================
+  // UPDATE EMPLOYEE EMPLOYMENT
+  // =========================================================
 
   async updateEmployeeEmployment(
     id: number,
@@ -240,6 +325,10 @@ export class EmployeeRepository {
     });
   }
 
+  // =========================================================
+  // UPDATE EMPLOYEE ADDRESS
+  // =========================================================
+
   async updateEmployeeAddress(
     id: number,
     updateEmployeeAddressDto: UpdateEmployeeAddressDto,
@@ -257,6 +346,10 @@ export class EmployeeRepository {
       select: this.employeeDetailSelect,
     });
   }
+
+  // =========================================================
+  // UPDATE EMPLOYEE BANK DETAILS
+  // =========================================================
 
   async updateEmployeeBankDetails(
     id: number,
@@ -278,6 +371,10 @@ export class EmployeeRepository {
     });
   }
 
+  // =========================================================
+  // UPDATE EMPLOYEE STATUTORY DETAILS
+  // =========================================================
+
   async updateEmployeeStatutoryDetails(
     id: number,
     updateEmployeeStatutoryDto: UpdateEmployeeStatutoryDto,
@@ -298,6 +395,10 @@ export class EmployeeRepository {
     });
   }
 
+  // =========================================================
+  // UPDATE EMPLOYEE NOMINEE
+  // =========================================================
+
   async updateEmployeeNominee(
     id: number,
     updateEmployeeNomineeDto: UpdateEmployeeNomineeDto,
@@ -316,6 +417,10 @@ export class EmployeeRepository {
       select: this.employeeDetailSelect,
     });
   }
+
+  // =========================================================
+  // UPDATE EMPLOYEE STATUS
+  // =========================================================
 
   async updateEmployeeStatus(
     id: number,

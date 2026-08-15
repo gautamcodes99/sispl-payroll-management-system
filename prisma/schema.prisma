@@ -8,147 +8,145 @@ datasource db {
 }
 
 model Employee {
-  id Int @id @default(autoincrement())
-
-  // Personal Information
-  photo String?
-
-  firstName  String
-  lastName   String
-  fatherName String?
-
-  dateOfBirth DateTime?
-  gender      String?
-
-  email String? @unique
-  phone String?
-
-  // Employment
-  designationId Int
-  designation   Designation @relation(fields: [designationId], references: [id], onDelete: Restrict)
-
-  joiningDate DateTime
-  basicSalary Decimal
-  status      String   @default("ACTIVE")
-
-  leftReason String?
-  leftDate   DateTime?
-
-  // Address
-  presentAddress   String?
-  permanentAddress String?
-
-  // Bank Details
-  bankName          String?
-  accountHolderName String?
-  accountNumber     String?
-  ifscCode          String?
-
-  // Statutory Details
-  aadhaarNumber String?
-  panNumber     String?
-  uanNumber     String?
-  esicNumber    String?
-
-  // Nominee
+  id                  Int          @id @default(autoincrement())
+  firstName           String
+  lastName            String
+  email               String?      @unique
+  phone               String?
+  joiningDate         DateTime
+  basicSalary         Decimal
+  status              String       @default("ACTIVE")
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  designationId       Int
+  aadhaarNumber       String?
+  accountHolderName   String?
+  accountNumber       String?
+  bankName            String?
+  dateOfBirth         DateTime?
+  esicNumber          String?
+  fatherName          String?
+  gender              String?
+  ifscCode            String?
+  nomineeMobile       String?
   nomineeName         String?
   nomineeRelationship String?
-  nomineeMobile       String?
-
-  // Relations
-  attendances Attendance[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  panNumber           String?
+  permanentAddress    String?
+  photo               String?
+  presentAddress      String?
+  uanNumber           String?
+  leftDate            DateTime?
+  leftReason          String?
+  attendances         Attendance[]
+  designation         Designation  @relation(fields: [designationId], references: [id])
 }
 
 model Site {
-  id Int @id @default(autoincrement())
-
-  siteName String
-
+  id            Int           @id @default(autoincrement())
+  siteName      String
   address       String?
   city          String?
   state         String?
   pinCode       String?
   contactPerson String?
   contactNumber String?
-
-  status String @default("ACTIVE")
-
-  workTypes    WorkType[]
-  designations Designation[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  status        String        @default("ACTIVE")
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  designations  Designation[]
+  workTypes     WorkType[]
 }
 
 model WorkType {
-  id Int @id @default(autoincrement())
-
-  siteId Int
-  site   Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
-
+  id           Int          @id @default(autoincrement())
+  siteId       Int
   workTypeName String
-  status       String @default("ACTIVE")
-
-  departments Department[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  status       String       @default("ACTIVE")
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  departments  Department[]
+  site         Site         @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@unique([siteId, workTypeName])
 }
 
 model Department {
-  id Int @id @default(autoincrement())
-
-  workTypeId Int
-  workType   WorkType @relation(fields: [workTypeId], references: [id], onDelete: Cascade)
-
+  id             Int      @id @default(autoincrement())
+  workTypeId     Int
   departmentName String
-  status         String @default("ACTIVE")
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  status         String   @default("ACTIVE")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  workType       WorkType @relation(fields: [workTypeId], references: [id], onDelete: Cascade)
 
   @@unique([workTypeId, departmentName])
 }
 
 model Designation {
-  id Int @id @default(autoincrement())
-
-  siteId Int
-  site   Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
-
+  id              Int      @id @default(autoincrement())
   designationName String
+  status          String   @default("ACTIVE")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  siteId          Int
 
-  status String @default("ACTIVE")
-
-  employees Employee[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  site        Site         @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  employees   Employee[]
+  wageMasters WageMaster[]
 
   @@unique([siteId, designationName])
 }
 
 model Attendance {
-  id Int @id @default(autoincrement())
-
-  employeeId Int
-  employee   Employee @relation(fields: [employeeId], references: [id])
-
+  id             Int              @id @default(autoincrement())
+  employeeId     Int
   attendanceDate DateTime
+  otHours        Decimal          @default(0) @db.Decimal(5, 2)
+  remarks        String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
   status         AttendanceStatus
+  shift          AttendanceShift
+  employee       Employee         @relation(fields: [employeeId], references: [id])
 
-  otHours Decimal @default(0) @db.Decimal(5, 2)
-  remarks String?
+  @@unique([employeeId, attendanceDate, shift])
+}
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model WageMaster {
+  id            Int                @id @default(autoincrement())
+  designationId Int
+  version       Int
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  basic         Decimal            @db.Decimal(12, 2)
+  da            Decimal            @db.Decimal(12, 2)
+  hraPercentage Decimal            @default(5.00) @db.Decimal(5, 2)
+  otOption      WageMasterOtOption @default(OPTION_A)
+  status        WageMasterStatus   @default(DRAFT)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
 
-  @@unique([employeeId, attendanceDate])
+  designation       Designation            @relation(fields: [designationId], references: [id], onDelete: Restrict)
+  specialAllowances SpecialAllowanceSlab[]
+
+  @@unique([designationId, version])
+  @@index([designationId, effectiveFrom])
+}
+
+model SpecialAllowanceSlab {
+  id           Int      @id @default(autoincrement())
+  wageMasterId Int
+  minDays      Decimal  @db.Decimal(5, 1)
+  maxDays      Decimal  @db.Decimal(5, 1)
+  ratePerDay   Decimal  @db.Decimal(10, 2)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  wageMaster WageMaster @relation(fields: [wageMasterId], references: [id], onDelete: Cascade)
+
+  @@unique([wageMasterId, minDays, maxDays])
+  @@index([wageMasterId])
 }
 
 enum AttendanceStatus {
@@ -157,4 +155,20 @@ enum AttendanceStatus {
   LEAVE
   HOLIDAY
   WEEKLY_OFF
+}
+
+enum AttendanceShift {
+  FIRST
+  SECOND
+  THIRD
+}
+
+enum WageMasterOtOption {
+  OPTION_A
+}
+
+enum WageMasterStatus {
+  DRAFT
+  ACTIVE
+  SUPERSEDED
 }

@@ -8,7 +8,7 @@ import {
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { AttendanceStatus } from '@prisma/client';
+import { AttendanceShift, AttendanceStatus } from '@prisma/client';
 
 export class UpdateAttendanceDto {
   @IsOptional()
@@ -23,6 +23,10 @@ export class UpdateAttendanceDto {
   @IsOptional()
   @IsEnum(AttendanceStatus)
   status?: AttendanceStatus;
+
+  @IsOptional()
+  @IsEnum(AttendanceShift)
+  shift?: AttendanceShift;
 
   @IsOptional()
   @Type(() => Number)

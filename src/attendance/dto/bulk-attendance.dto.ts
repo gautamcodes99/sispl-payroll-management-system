@@ -8,7 +8,7 @@ import {
   IsString,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { AttendanceStatus } from '@prisma/client';
+import { AttendanceShift, AttendanceStatus } from '@prisma/client';
 
 export class BulkAttendanceDto {
   @IsDateString()
@@ -16,6 +16,9 @@ export class BulkAttendanceDto {
 
   @IsEnum(AttendanceStatus)
   status!: AttendanceStatus;
+
+  @IsEnum(AttendanceShift)
+  shift!: AttendanceShift;
 
   @Type(() => Number)
   @IsNumber()

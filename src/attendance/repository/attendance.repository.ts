@@ -6,16 +6,34 @@ import { AttendanceQueryDto } from '../dto/attendance-query.dto';
 import { BulkAttendanceDto } from '../dto/bulk-attendance.dto';
 import { BulkOtUpdateDto } from '../dto/bulk-ot-update.dto';
 import { MonthlyAttendanceQueryDto } from '../dto/monthly-attendance-query.dto';
-import { Prisma } from '@prisma/client';
+import { AttendanceShift, Prisma } from '@prisma/client';
 
 @Injectable()
 export class AttendanceRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  // =========================================================
+  // ATTENDANCE LIST SELECT
+  //
+  // Locked organisation architecture:
+  //
+  // Site
+  // ├── Work Type
+  // │    └── Department
+  // │
+  // └── Designation
+  //      └── Employee
+  //
+  // Therefore Attendance -> Employee -> Designation -> Site
+  //
+  // Work Type and Department are NOT employee relations.
+  // =========================================================
+
   private readonly attendanceListSelect = {
     id: true,
     attendanceDate: true,
     status: true,
+    shift: true,
     otHours: true,
     remarks: true,
 
@@ -32,24 +50,10 @@ export class AttendanceRepository {
             id: true,
             designationName: true,
 
-            department: {
+            site: {
               select: {
                 id: true,
-                departmentName: true,
-
-                workType: {
-                  select: {
-                    id: true,
-                    workTypeName: true,
-
-                    site: {
-                      select: {
-                        id: true,
-                        siteName: true,
-                      },
-                    },
-                  },
-                },
+                siteName: true,
               },
             },
           },
@@ -58,10 +62,15 @@ export class AttendanceRepository {
     },
   };
 
+  // =========================================================
+  // ATTENDANCE DETAIL SELECT
+  // =========================================================
+
   private readonly attendanceDetailSelect = {
     id: true,
     attendanceDate: true,
     status: true,
+    shift: true,
     otHours: true,
     remarks: true,
     createdAt: true,
@@ -80,24 +89,10 @@ export class AttendanceRepository {
             id: true,
             designationName: true,
 
-            department: {
+            site: {
               select: {
                 id: true,
-                departmentName: true,
-
-                workType: {
-                  select: {
-                    id: true,
-                    workTypeName: true,
-
-                    site: {
-                      select: {
-                        id: true,
-                        siteName: true,
-                      },
-                    },
-                  },
-                },
+                siteName: true,
               },
             },
           },
@@ -105,6 +100,10 @@ export class AttendanceRepository {
       },
     },
   };
+
+  // =========================================================
+  // CREATE
+  // =========================================================
 
   async create(createAttendanceDto: CreateAttendanceDto) {
     return this.prisma.attendance.create({
@@ -119,6 +118,8 @@ export class AttendanceRepository {
 
         status: createAttendanceDto.status,
 
+        shift: createAttendanceDto.shift,
+
         otHours: createAttendanceDto.otHours,
 
         remarks: createAttendanceDto.remarks,
@@ -128,26 +129,22 @@ export class AttendanceRepository {
     });
   }
 
+  // =========================================================
+  // FIND ATTENDANCES
+  // =========================================================
+
   async findAttendances(query: AttendanceQueryDto) {
-    const {
-      page,
-      limit,
-      attendanceDate,
-      status,
-      siteId,
-      workTypeId,
-      departmentId,
-      designationId,
-      search,
-    } = query;
+    const { page, limit, attendanceDate, status, siteId, search, shift } =
+      query;
 
     const skip = (page - 1) * limit;
 
     const where: Prisma.AttendanceWhereInput = {};
 
-    /*
-     * Attendance Date
-     */
+    // =======================================================
+    // ATTENDANCE DATE
+    // =======================================================
+
     if (attendanceDate) {
       const date = new Date(attendanceDate);
 
@@ -160,73 +157,50 @@ export class AttendanceRepository {
       };
     }
 
-    /*
-     * Attendance Status
-     */
+    // =======================================================
+    // STATUS
+    // =======================================================
+
     if (status) {
       where.status = status;
     }
 
-    /*
-     * Employee organisation hierarchy:
-     *
-     * Employee
-     *   └── Designation
-     *         └── Department
-     *               └── Work Type
-     *                     └── Site
-     *
-     * Therefore:
-     *
-     * designationId
-     * departmentId
-     * workTypeId
-     * siteId
-     *
-     * are all filtered through Employee -> Designation.
-     */
+    // =======================================================
+    // SHIFT
+    // =======================================================
 
-    if (designationId || departmentId || workTypeId || siteId || search) {
+    if (shift) {
+      where.shift = shift;
+    }
+
+    // =======================================================
+    // EMPLOYEE FILTERS
+    //
+    // Employee is connected to Designation.
+    //
+    // Designation is connected directly to Site.
+    //
+    // There is NO Employee -> Department relation.
+    // There is NO Employee -> WorkType relation.
+    // =======================================================
+
+    if (siteId || search) {
       const employeeWhere: Prisma.EmployeeWhereInput = {};
 
-      /*
-       * Organisation filters
-       */
-      if (designationId || departmentId || workTypeId || siteId) {
-        const designationWhere: Prisma.DesignationWhereInput = {};
+      // -----------------------------------------------------
+      // SITE
+      // -----------------------------------------------------
 
-        if (designationId) {
-          designationWhere.id = designationId;
-        }
-
-        if (departmentId || workTypeId || siteId) {
-          const departmentWhere: Prisma.DepartmentWhereInput = {};
-
-          if (departmentId) {
-            departmentWhere.id = departmentId;
-          }
-
-          if (workTypeId || siteId) {
-            const workTypeWhere: Prisma.WorkTypeWhereInput = {};
-
-            if (workTypeId) {
-              workTypeWhere.id = workTypeId;
-            }
-
-            if (siteId) {
-              workTypeWhere.siteId = siteId;
-            }
-
-            departmentWhere.workType = workTypeWhere;
-          }
-        }
-
-        employeeWhere.designation = designationWhere;
+      if (siteId) {
+        employeeWhere.designation = {
+          siteId,
+        };
       }
 
-      /*
-       * Employee search
-       */
+      // -----------------------------------------------------
+      // EMPLOYEE SEARCH
+      // -----------------------------------------------------
+
       if (search) {
         employeeWhere.OR = [
           {
@@ -235,6 +209,7 @@ export class AttendanceRepository {
               mode: 'insensitive',
             },
           },
+
           {
             lastName: {
               contains: search,
@@ -246,6 +221,10 @@ export class AttendanceRepository {
 
       where.employee = employeeWhere;
     }
+
+    // =======================================================
+    // QUERY
+    // =======================================================
 
     const [attendances, total] = await Promise.all([
       this.prisma.attendance.findMany({
@@ -272,6 +251,10 @@ export class AttendanceRepository {
       total,
     };
   }
+
+  // =========================================================
+  // PENDING EMPLOYEES
+  // =========================================================
 
   async findPendingEmployees(attendanceDate: Date) {
     const date = new Date(attendanceDate);
@@ -326,6 +309,10 @@ export class AttendanceRepository {
     });
   }
 
+  // =========================================================
+  // DASHBOARD SUMMARY
+  // =========================================================
+
   async getDashboardSummary(attendanceDate: Date) {
     const date = new Date(attendanceDate);
 
@@ -341,11 +328,19 @@ export class AttendanceRepository {
       weeklyOff,
       pending,
     ] = await Promise.all([
+      // -----------------------------------------------------
+      // TOTAL ACTIVE EMPLOYEES
+      // -----------------------------------------------------
+
       this.prisma.employee.count({
         where: {
           status: 'ACTIVE',
         },
       }),
+
+      // -----------------------------------------------------
+      // PRESENT
+      // -----------------------------------------------------
 
       this.prisma.attendance.count({
         where: {
@@ -358,6 +353,10 @@ export class AttendanceRepository {
         },
       }),
 
+      // -----------------------------------------------------
+      // ABSENT
+      // -----------------------------------------------------
+
       this.prisma.attendance.count({
         where: {
           attendanceDate: {
@@ -368,6 +367,10 @@ export class AttendanceRepository {
           status: 'ABSENT',
         },
       }),
+
+      // -----------------------------------------------------
+      // LEAVE
+      // -----------------------------------------------------
 
       this.prisma.attendance.count({
         where: {
@@ -380,6 +383,10 @@ export class AttendanceRepository {
         },
       }),
 
+      // -----------------------------------------------------
+      // HOLIDAY
+      // -----------------------------------------------------
+
       this.prisma.attendance.count({
         where: {
           attendanceDate: {
@@ -391,6 +398,10 @@ export class AttendanceRepository {
         },
       }),
 
+      // -----------------------------------------------------
+      // WEEKLY OFF
+      // -----------------------------------------------------
+
       this.prisma.attendance.count({
         where: {
           attendanceDate: {
@@ -401,6 +412,10 @@ export class AttendanceRepository {
           status: 'WEEKLY_OFF',
         },
       }),
+
+      // -----------------------------------------------------
+      // PENDING
+      // -----------------------------------------------------
 
       this.prisma.employee.count({
         where: {
@@ -429,10 +444,20 @@ export class AttendanceRepository {
     };
   }
 
-  async findExistingAttendance(attendanceDate: Date, employeeIds: number[]) {
+  // =========================================================
+  // FIND EXISTING ATTENDANCE
+  // =========================================================
+
+  async findExistingAttendance(
+    attendanceDate: Date,
+    employeeIds: number[],
+    shift: AttendanceShift,
+  ) {
     return this.prisma.attendance.findMany({
       where: {
         attendanceDate,
+
+        shift,
 
         employeeId: {
           in: employeeIds,
@@ -441,6 +466,7 @@ export class AttendanceRepository {
 
       select: {
         employeeId: true,
+        shift: true,
 
         employee: {
           select: {
@@ -451,6 +477,10 @@ export class AttendanceRepository {
       },
     });
   }
+
+  // =========================================================
+  // BULK CREATE ATTENDANCE
+  // =========================================================
 
   async bulkCreateAttendance(bulkAttendanceDto: BulkAttendanceDto) {
     const attendanceDate = new Date(bulkAttendanceDto.attendanceDate);
@@ -469,6 +499,8 @@ export class AttendanceRepository {
 
             status: bulkAttendanceDto.status,
 
+            shift: bulkAttendanceDto.shift,
+
             otHours: bulkAttendanceDto.otHours,
 
             remarks: bulkAttendanceDto.remarks,
@@ -480,6 +512,10 @@ export class AttendanceRepository {
     );
   }
 
+  // =========================================================
+  // BULK OT UPDATE
+  // =========================================================
+
   async bulkUpdateOt(bulkOtUpdateDto: BulkOtUpdateDto) {
     const attendanceDate = new Date(bulkOtUpdateDto.attendanceDate);
 
@@ -490,6 +526,8 @@ export class AttendanceRepository {
             employeeId: employee.employeeId,
 
             attendanceDate,
+
+            shift: employee.shift,
           },
 
           data: {
@@ -499,6 +537,10 @@ export class AttendanceRepository {
       ),
     );
   }
+
+  // =========================================================
+  // MONTHLY ATTENDANCE SUMMARY
+  // =========================================================
 
   async getMonthlyAttendanceSummary(query: MonthlyAttendanceQueryDto) {
     const { employeeId, month, year } = query;
@@ -593,6 +635,10 @@ export class AttendanceRepository {
     };
   }
 
+  // =========================================================
+  // FIND BY ID
+  // =========================================================
+
   async findAttendanceById(id: number) {
     return this.prisma.attendance.findUnique({
       where: {
@@ -602,6 +648,10 @@ export class AttendanceRepository {
       select: this.attendanceDetailSelect,
     });
   }
+
+  // =========================================================
+  // UPDATE
+  // =========================================================
 
   async updateAttendance(id: number, updateAttendanceDto: UpdateAttendanceDto) {
     const data: Prisma.AttendanceUpdateInput = {};
@@ -622,6 +672,10 @@ export class AttendanceRepository {
       data.status = updateAttendanceDto.status;
     }
 
+    if (updateAttendanceDto.shift !== undefined) {
+      data.shift = updateAttendanceDto.shift;
+    }
+
     if (updateAttendanceDto.otHours !== undefined) {
       data.otHours = updateAttendanceDto.otHours;
     }
@@ -640,6 +694,10 @@ export class AttendanceRepository {
       select: this.attendanceDetailSelect,
     });
   }
+
+  // =========================================================
+  // DELETE
+  // =========================================================
 
   async deleteAttendance(id: number) {
     return this.prisma.attendance.delete({
