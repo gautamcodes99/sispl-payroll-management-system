@@ -6,9 +6,16 @@ import { PrismaService } from './prisma/prisma.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { OrganisationModule } from './organisation/organisation.module';
+import { WageMasterModule } from './wage-master/wage-master.module';
 
 @Module({
-  imports: [EmployeeModule, PrismaModule, AttendanceModule, OrganisationModule],
+  imports: [
+    EmployeeModule,
+    PrismaModule,
+    AttendanceModule,
+    OrganisationModule,
+    WageMasterModule,
+  ],
   controllers: [AppController],
   providers: [AppService, PrismaService],
 })
