@@ -8,6 +8,7 @@ import { AttendanceModule } from './attendance/attendance.module';
 import { OrganisationModule } from './organisation/organisation.module';
 import { WageMasterModule } from './wage-master/wage-master.module';
 import { VariableAllowanceModule } from './variable-allowance/variable-allowance.module';
+import { ManualDeductionModule } from './manual-deduction/manual-deduction.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { VariableAllowanceModule } from './variable-allowance/variable-allowance
     OrganisationModule,
     WageMasterModule,
     VariableAllowanceModule,
+    ManualDeductionModule,
   ],
   controllers: [AppController],
   providers: [AppService, PrismaService],
