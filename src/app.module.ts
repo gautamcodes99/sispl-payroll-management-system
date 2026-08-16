@@ -7,6 +7,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { OrganisationModule } from './organisation/organisation.module';
 import { WageMasterModule } from './wage-master/wage-master.module';
+import { VariableAllowanceModule } from './variable-allowance/variable-allowance.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { WageMasterModule } from './wage-master/wage-master.module';
     AttendanceModule,
     OrganisationModule,
     WageMasterModule,
+    VariableAllowanceModule,
   ],
   controllers: [AppController],
   providers: [AppService, PrismaService],
