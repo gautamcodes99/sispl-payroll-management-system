@@ -9,6 +9,7 @@ import { OrganisationModule } from './organisation/organisation.module';
 import { WageMasterModule } from './wage-master/wage-master.module';
 import { VariableAllowanceModule } from './variable-allowance/variable-allowance.module';
 import { ManualDeductionModule } from './manual-deduction/manual-deduction.module';
+import { PayrollModule } from './payroll/payroll.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { ManualDeductionModule } from './manual-deduction/manual-deduction.modul
     WageMasterModule,
     VariableAllowanceModule,
     ManualDeductionModule,
+    PayrollModule,
   ],
   controllers: [AppController],
   providers: [AppService, PrismaService],

@@ -1,0 +1,145 @@
+import { Controller, Get, Query } from '@nestjs/common';
+import { PayrollCalculationService } from './payroll-calculation.service';
+import { PayrollPreviewQueryDto } from './dto/payroll-preview-query.dto';
+import { MonthlyPayrollPreviewQueryDto } from './dto/monthly-payroll-preview-query.dto';
+
+@Controller('payroll')
+export class PayrollController {
+  constructor(
+    private readonly payrollCalculationService: PayrollCalculationService,
+  ) {}
+
+  // =========================================================
+  // MONEY OUTPUT
+  //
+  // Payroll calculations retain full precision internally.
+  //
+  // API monetary output is presented to maximum 2 decimals.
+  // =========================================================
+
+  private money(value: number): number {
+    return Number(value.toFixed(2));
+  }
+
+  private formatEmployeePayroll<
+    T extends Awaited<
+      ReturnType<PayrollCalculationService['calculateEmployee']>
+    >,
+  >(payroll: T) {
+    return {
+      ...payroll,
+
+      earnings: {
+        ...payroll.earnings,
+
+        monthlyBasic: this.money(payroll.earnings.monthlyBasic),
+        monthlyDa: this.money(payroll.earnings.monthlyDa),
+
+        earnedBasic: this.money(payroll.earnings.earnedBasic),
+        earnedDa: this.money(payroll.earnings.earnedDa),
+        wages: this.money(payroll.earnings.wages),
+
+        hraPercentage: payroll.earnings.hraPercentage,
+        hra: this.money(payroll.earnings.hra),
+
+        otRate: this.money(payroll.earnings.otRate),
+        otHours: payroll.earnings.otHours,
+        otAmount: this.money(payroll.earnings.otAmount),
+
+        conveyance: this.money(payroll.earnings.conveyance),
+
+        specialAllowance: {
+          ...payroll.earnings.specialAllowance,
+          ratePerDay: this.money(payroll.earnings.specialAllowance.ratePerDay),
+          amount: this.money(payroll.earnings.specialAllowance.amount),
+        },
+
+        rab: this.money(payroll.earnings.rab),
+        arrears: this.money(payroll.earnings.arrears),
+
+        gross: this.money(payroll.earnings.gross),
+      },
+
+      statutoryDeductions: {
+        pf: this.money(payroll.statutoryDeductions.pf),
+        esic: this.money(payroll.statutoryDeductions.esic),
+        ptax: this.money(payroll.statutoryDeductions.ptax),
+        mlwf: this.money(payroll.statutoryDeductions.mlwf),
+        total: this.money(payroll.statutoryDeductions.total),
+      },
+
+      manualDeductions: {
+        advanceRecovery: this.money(payroll.manualDeductions.advanceRecovery),
+        canteen: this.money(payroll.manualDeductions.canteen),
+        transport: this.money(payroll.manualDeductions.transport),
+        uniformRecovery: this.money(payroll.manualDeductions.uniformRecovery),
+        fine: this.money(payroll.manualDeductions.fine),
+        otherDeduction: this.money(payroll.manualDeductions.otherDeduction),
+        total: this.money(payroll.manualDeductions.total),
+      },
+
+      totalDeductions: this.money(payroll.totalDeductions),
+
+      netSalary: this.money(payroll.netSalary),
+    };
+  }
+
+  // =========================================================
+  // SINGLE EMPLOYEE PREVIEW
+  // =========================================================
+
+  @Get('preview')
+  async preview(@Query() query: PayrollPreviewQueryDto) {
+    const result = await this.payrollCalculationService.calculateEmployee(
+      query.employeeId,
+      new Date(query.salaryMonth),
+    );
+
+    return {
+      success: true,
+      message: 'Payroll preview calculated successfully.',
+      data: this.formatEmployeePayroll(result),
+    };
+  }
+
+  // =========================================================
+  // COMPANY-WIDE MONTHLY PREVIEW
+  // =========================================================
+
+  @Get('preview/monthly')
+  async monthlyPreview(@Query() query: MonthlyPayrollPreviewQueryDto) {
+    const result = await this.payrollCalculationService.calculateMonthlyPreview(
+      new Date(query.salaryMonth),
+    );
+
+    return {
+      success: true,
+      message: 'Monthly payroll preview calculated successfully.',
+
+      data: {
+        salaryMonth: result.salaryMonth,
+
+        employeeCount: result.employeeCount,
+        processedCount: result.processedCount,
+        errorCount: result.errorCount,
+
+        payrolls: result.payrolls.map((payroll) =>
+          this.formatEmployeePayroll(payroll),
+        ),
+
+        summary: {
+          gross: this.money(result.summary.gross),
+          pf: this.money(result.summary.pf),
+          esic: this.money(result.summary.esic),
+          ptax: this.money(result.summary.ptax),
+          mlwf: this.money(result.summary.mlwf),
+          manualDeductions: this.money(result.summary.manualDeductions),
+          totalDeductions: this.money(result.summary.totalDeductions),
+          netSalary: this.money(result.summary.netSalary),
+        },
+
+        errors: result.errors,
+      },
+    };
+  }
+}
