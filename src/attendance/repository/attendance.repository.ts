@@ -19,14 +19,16 @@ export class AttendanceRepository {
   //
   // Site
   // ├── Work Type
-  // │    └── Department
+  // │   └── Department
   // │
   // └── Designation
-  //      └── Employee
+  //     └── Employee
   //
-  // Therefore Attendance -> Employee -> Designation -> Site
+  // Attendance now stores Department so the operational
+  // Department / Work Type / Site context survives refresh.
   //
-  // Work Type and Department are NOT employee relations.
+  // Employee continues to belong to Designation.
+  // Designation continues to belong directly to Site.
   // =========================================================
 
   private readonly attendanceListSelect = {
@@ -36,6 +38,27 @@ export class AttendanceRepository {
     shift: true,
     otHours: true,
     remarks: true,
+
+    department: {
+      select: {
+        id: true,
+        departmentName: true,
+
+        workType: {
+          select: {
+            id: true,
+            workTypeName: true,
+
+            site: {
+              select: {
+                id: true,
+                siteName: true,
+              },
+            },
+          },
+        },
+      },
+    },
 
     employee: {
       select: {
@@ -76,6 +99,27 @@ export class AttendanceRepository {
     createdAt: true,
     updatedAt: true,
 
+    department: {
+      select: {
+        id: true,
+        departmentName: true,
+
+        workType: {
+          select: {
+            id: true,
+            workTypeName: true,
+
+            site: {
+              select: {
+                id: true,
+                siteName: true,
+              },
+            },
+          },
+        },
+      },
+    },
+
     employee: {
       select: {
         id: true,
@@ -102,6 +146,92 @@ export class AttendanceRepository {
   };
 
   // =========================================================
+  // EMPLOYEE ATTENDANCE CONTEXT
+  //
+  // Used by Service business validation.
+  // =========================================================
+
+  async findEmployeeAttendanceContext(employeeId: number) {
+    return this.prisma.employee.findUnique({
+      where: {
+        id: employeeId,
+      },
+
+      select: {
+        id: true,
+
+        designation: {
+          select: {
+            siteId: true,
+          },
+        },
+      },
+    });
+  }
+
+  // =========================================================
+  // BULK EMPLOYEE ATTENDANCE CONTEXT
+  //
+  // Used by Service business validation.
+  // =========================================================
+
+  async findEmployeesAttendanceContext(employeeIds: number[]) {
+    return this.prisma.employee.findMany({
+      where: {
+        id: {
+          in: employeeIds,
+        },
+      },
+
+      select: {
+        id: true,
+
+        designation: {
+          select: {
+            siteId: true,
+          },
+        },
+      },
+    });
+  }
+
+  // =========================================================
+  // DEPARTMENT ATTENDANCE CONTEXT
+  //
+  // Department -> Work Type -> Site
+  //
+  // Used by Service business validation.
+  // =========================================================
+
+  async findDepartmentAttendanceContext(departmentId: number) {
+    return this.prisma.department.findUnique({
+      where: {
+        id: departmentId,
+      },
+
+      select: {
+        id: true,
+        departmentName: true,
+
+        workType: {
+          select: {
+            id: true,
+            workTypeName: true,
+            siteId: true,
+
+            site: {
+              select: {
+                id: true,
+                siteName: true,
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  // =========================================================
   // CREATE
   // =========================================================
 
@@ -111,6 +241,12 @@ export class AttendanceRepository {
         employee: {
           connect: {
             id: createAttendanceDto.employeeId,
+          },
+        },
+
+        department: {
+          connect: {
+            id: createAttendanceDto.departmentId,
           },
         },
 
@@ -134,8 +270,18 @@ export class AttendanceRepository {
   // =========================================================
 
   async findAttendances(query: AttendanceQueryDto) {
-    const { page, limit, attendanceDate, status, siteId, search, shift } =
-      query;
+    const {
+      page,
+      limit,
+      attendanceDate,
+      status,
+      siteId,
+      workTypeId,
+      departmentId,
+      designationId,
+      search,
+      shift,
+    } = query;
 
     const skip = (page - 1) * limit;
 
@@ -174,32 +320,37 @@ export class AttendanceRepository {
     }
 
     // =======================================================
-    // EMPLOYEE FILTERS
+    // ATTENDANCE ORGANISATION CONTEXT
     //
-    // Employee is connected to Designation.
-    //
-    // Designation is connected directly to Site.
-    //
-    // There is NO Employee -> Department relation.
-    // There is NO Employee -> WorkType relation.
+    // Attendance -> Department -> Work Type -> Site
     // =======================================================
 
-    if (siteId || search) {
+    if (departmentId) {
+      where.departmentId = departmentId;
+    } else if (workTypeId) {
+      where.department = {
+        workTypeId,
+      };
+    } else if (siteId) {
+      where.department = {
+        workType: {
+          siteId,
+        },
+      };
+    }
+
+    // =======================================================
+    // EMPLOYEE FILTERS
+    //
+    // Employee -> Designation -> Site
+    // =======================================================
+
+    if (designationId || search) {
       const employeeWhere: Prisma.EmployeeWhereInput = {};
 
-      // -----------------------------------------------------
-      // SITE
-      // -----------------------------------------------------
-
-      if (siteId) {
-        employeeWhere.designation = {
-          siteId,
-        };
+      if (designationId) {
+        employeeWhere.designationId = designationId;
       }
-
-      // -----------------------------------------------------
-      // EMPLOYEE SEARCH
-      // -----------------------------------------------------
 
       if (search) {
         employeeWhere.OR = [
@@ -326,6 +477,8 @@ export class AttendanceRepository {
       leave,
       holiday,
       weeklyOff,
+      halfDay,
+      paidHoliday,
       pending,
     ] = await Promise.all([
       // -----------------------------------------------------
@@ -414,6 +567,36 @@ export class AttendanceRepository {
       }),
 
       // -----------------------------------------------------
+      // HALF DAY
+      // -----------------------------------------------------
+
+      this.prisma.attendance.count({
+        where: {
+          attendanceDate: {
+            gte: date,
+            lt: nextDate,
+          },
+
+          status: 'HALF_DAY',
+        },
+      }),
+
+      // -----------------------------------------------------
+      // PAID HOLIDAY
+      // -----------------------------------------------------
+
+      this.prisma.attendance.count({
+        where: {
+          attendanceDate: {
+            gte: date,
+            lt: nextDate,
+          },
+
+          status: 'PAID_HOLIDAY',
+        },
+      }),
+
+      // -----------------------------------------------------
       // PENDING
       // -----------------------------------------------------
 
@@ -440,6 +623,8 @@ export class AttendanceRepository {
       leave,
       holiday,
       weeklyOff,
+      halfDay,
+      paidHoliday,
       pending,
     };
   }
@@ -492,6 +677,12 @@ export class AttendanceRepository {
             employee: {
               connect: {
                 id: employeeId,
+              },
+            },
+
+            department: {
+              connect: {
+                id: bulkAttendanceDto.departmentId,
               },
             },
 
@@ -582,6 +773,8 @@ export class AttendanceRepository {
     let leave = 0;
     let holiday = 0;
     let weeklyOff = 0;
+    let halfDay = 0;
+    let paidHoliday = 0;
     let otHours = 0;
 
     attendances.forEach((attendance) => {
@@ -604,6 +797,14 @@ export class AttendanceRepository {
 
         case 'WEEKLY_OFF':
           weeklyOff++;
+          break;
+
+        case 'HALF_DAY':
+          halfDay++;
+          break;
+
+        case 'PAID_HOLIDAY':
+          paidHoliday++;
           break;
       }
 
@@ -630,6 +831,10 @@ export class AttendanceRepository {
       holiday,
 
       weeklyOff,
+
+      halfDay,
+
+      paidHoliday,
 
       otHours,
     };

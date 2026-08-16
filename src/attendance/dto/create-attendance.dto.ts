@@ -15,6 +15,11 @@ export class CreateAttendanceDto {
   @IsInt()
   employeeId!: number;
 
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  departmentId!: number;
+
   @IsDateString()
   attendanceDate!: Date;
 

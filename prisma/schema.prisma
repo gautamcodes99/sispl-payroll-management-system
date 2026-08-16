@@ -74,13 +74,14 @@ model WorkType {
 }
 
 model Department {
-  id             Int      @id @default(autoincrement())
+  id             Int          @id @default(autoincrement())
   workTypeId     Int
   departmentName String
-  status         String   @default("ACTIVE")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  workType       WorkType @relation(fields: [workTypeId], references: [id], onDelete: Cascade)
+  status         String       @default("ACTIVE")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  workType       WorkType     @relation(fields: [workTypeId], references: [id], onDelete: Cascade)
+  attendances    Attendance[]
 
   @@unique([workTypeId, departmentName])
 }
@@ -103,6 +104,7 @@ model Designation {
 model Attendance {
   id             Int              @id @default(autoincrement())
   employeeId     Int
+  departmentId   Int?
   attendanceDate DateTime
   otHours        Decimal          @default(0) @db.Decimal(5, 2)
   remarks        String?
@@ -110,9 +112,12 @@ model Attendance {
   updatedAt      DateTime         @updatedAt
   status         AttendanceStatus
   shift          AttendanceShift
-  employee       Employee         @relation(fields: [employeeId], references: [id])
+
+  employee   Employee    @relation(fields: [employeeId], references: [id])
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
 
   @@unique([employeeId, attendanceDate, shift])
+  @@index([departmentId])
 }
 
 model WageMaster {
@@ -194,6 +199,8 @@ enum AttendanceStatus {
   LEAVE
   HOLIDAY
   WEEKLY_OFF
+  HALF_DAY
+  PAID_HOLIDAY
 }
 
 enum AttendanceShift {
