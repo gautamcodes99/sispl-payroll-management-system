@@ -351,6 +351,13 @@ export class PayrollCalculationService {
         lastName: employee.lastName,
         gender: employee.gender,
 
+        bankName: employee.bankName,
+        accountHolderName: employee.accountHolderName,
+        accountNumber: employee.accountNumber,
+        ifscCode: employee.ifscCode,
+        uanNumber: employee.uanNumber,
+        esicNumber: employee.esicNumber,
+
         designation: {
           id: employee.designation.id,
           designationName: employee.designation.designationName,

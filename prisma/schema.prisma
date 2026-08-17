@@ -256,6 +256,13 @@ model PayrollEmployeeSnapshot {
   siteId          Int
   siteName        String
 
+  bankName          String?
+  accountHolderName String?
+  accountNumber     String?
+  ifscCode          String?
+  uanNumber         String?
+  esicNumber        String?
+
   // ---------------------------------------------------------
   // WAGE MASTER SNAPSHOT
   // ---------------------------------------------------------

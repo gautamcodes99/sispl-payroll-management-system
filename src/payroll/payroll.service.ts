@@ -64,6 +64,13 @@ export class PayrollService {
       siteId: payroll.employee.site.id,
       siteName: payroll.employee.site.siteName,
 
+      bankName: payroll.employee.bankName,
+      accountHolderName: payroll.employee.accountHolderName,
+      accountNumber: payroll.employee.accountNumber,
+      ifscCode: payroll.employee.ifscCode,
+      uanNumber: payroll.employee.uanNumber,
+      esicNumber: payroll.employee.esicNumber,
+
       wageMasterVersion: payroll.wageMaster.version,
 
       presentDays: payroll.attendance.presentDays,
