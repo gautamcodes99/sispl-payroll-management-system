@@ -201,6 +201,72 @@ export class PayrollRepository {
       },
     });
   }
+  // =========================================================
+  // PAYROLL RUN HISTORY
+  //
+  // Optional salary-month filter.
+  //
+  // Returns lightweight run metadata for frontend history
+  // screens without loading every employee snapshot.
+  // =========================================================
+
+  async findPayrollRuns(salaryMonth?: Date) {
+    return this.prisma.payrollRun.findMany({
+      where: {
+        ...(salaryMonth !== undefined && {
+          salaryMonth,
+        }),
+      },
+
+      orderBy: [
+        {
+          salaryMonth: 'desc',
+        },
+        {
+          version: 'desc',
+        },
+      ],
+
+      include: {
+        _count: {
+          select: {
+            snapshots: true,
+          },
+        },
+      },
+    });
+  }
+
+  // =========================================================
+  // CURRENT PAYROLL RUN WITH SNAPSHOTS
+  //
+  // Current means the latest non-superseded version:
+  // FINALIZED or UNLOCKED.
+  // =========================================================
+
+  async findCurrentPayrollRunWithSnapshots(salaryMonth: Date) {
+    return this.prisma.payrollRun.findFirst({
+      where: {
+        salaryMonth,
+
+        status: {
+          in: [PayrollRunStatus.FINALIZED, PayrollRunStatus.UNLOCKED],
+        },
+      },
+
+      orderBy: {
+        version: 'desc',
+      },
+
+      include: {
+        snapshots: {
+          orderBy: {
+            employeeId: 'asc',
+          },
+        },
+      },
+    });
+  }
 
   // =========================================================
   // FIND PAYROLL RUN BY ID

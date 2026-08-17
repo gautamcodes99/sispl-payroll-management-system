@@ -14,6 +14,7 @@ import { PayrollPreviewQueryDto } from './dto/payroll-preview-query.dto';
 import { MonthlyPayrollPreviewQueryDto } from './dto/monthly-payroll-preview-query.dto';
 import { FinalizePayrollDto } from './dto/finalize-payroll.dto';
 import { ReprocessPayrollDto } from './dto/reprocess-payroll.dto';
+import { PayrollRunQueryDto } from './dto/payroll-run-query.dto';
 
 @Controller('payroll')
 export class PayrollController {
@@ -190,6 +191,26 @@ export class PayrollController {
   // =========================================================
   // GET FINALIZED / HISTORICAL PAYROLL RUN
   // =========================================================
+
+  // =========================================================
+  // PAYROLL RUN HISTORY
+  // =========================================================
+
+  @Get('runs')
+  async findRuns(@Query() query: PayrollRunQueryDto) {
+    return this.payrollService.findRuns(
+      query.salaryMonth ? new Date(query.salaryMonth) : undefined,
+    );
+  }
+
+  // =========================================================
+  // CURRENT PAYROLL RUN FOR SALARY MONTH
+  // =========================================================
+
+  @Get('current')
+  async findCurrent(@Query() query: MonthlyPayrollPreviewQueryDto) {
+    return this.payrollService.findCurrent(new Date(query.salaryMonth));
+  }
 
   @Get('runs/:id')
   async findOne(@Param('id', ParseIntPipe) id: number) {

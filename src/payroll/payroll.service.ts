@@ -216,6 +216,69 @@ export class PayrollService {
       data: payrollRun,
     };
   }
+  // =========================================================
+  // PAYROLL RUN HISTORY
+  // =========================================================
+
+  async findRuns(salaryMonthInput?: Date) {
+    let salaryMonth: Date | undefined;
+
+    if (salaryMonthInput) {
+      if (Number.isNaN(salaryMonthInput.getTime())) {
+        throw new BadRequestException('Salary month is invalid.');
+      }
+
+      salaryMonth = this.normalizeSalaryMonth(salaryMonthInput);
+    }
+
+    const runs = await this.payrollRepository.findPayrollRuns(salaryMonth);
+
+    return {
+      success: true,
+      message: 'Payroll Runs fetched successfully.',
+
+      data: runs.map((run) => ({
+        id: run.id,
+        salaryMonth: run.salaryMonth,
+        version: run.version,
+        status: run.status,
+        finalizedAt: run.finalizedAt,
+        unlockedAt: run.unlockedAt,
+        createdAt: run.createdAt,
+        updatedAt: run.updatedAt,
+        employeeCount: run._count.snapshots,
+      })),
+    };
+  }
+
+  // =========================================================
+  // CURRENT PAYROLL RUN
+  // =========================================================
+
+  async findCurrent(salaryMonthInput: Date) {
+    if (Number.isNaN(salaryMonthInput.getTime())) {
+      throw new BadRequestException('Salary month is invalid.');
+    }
+
+    const salaryMonth = this.normalizeSalaryMonth(salaryMonthInput);
+
+    const payrollRun =
+      await this.payrollRepository.findCurrentPayrollRunWithSnapshots(
+        salaryMonth,
+      );
+
+    if (!payrollRun) {
+      throw new NotFoundException(
+        `No current Payroll Run found for ${salaryMonth.toISOString()}.`,
+      );
+    }
+
+    return {
+      success: true,
+      message: 'Current Payroll Run fetched successfully.',
+      data: payrollRun,
+    };
+  }
 
   // =========================================================
   // FIND PAYROLL RUN
