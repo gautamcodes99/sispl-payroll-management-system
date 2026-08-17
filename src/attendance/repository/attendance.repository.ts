@@ -15,20 +15,20 @@ export class AttendanceRepository {
   // =========================================================
   // ATTENDANCE LIST SELECT
   //
-  // Locked organisation architecture:
+  // // Locked organisation architecture:
   //
   // Site
-  // ├── Work Type
-  // │   └── Department
-  // │
-  // └── Designation
-  //     └── Employee
+  // └── Work Type
+  //     └── Department
   //
-  // Attendance now stores Department so the operational
+  // Designation is a company-wide master.
+  // Employee belongs to Designation.
+  //
+  // Attendance stores Department so the operational
   // Department / Work Type / Site context survives refresh.
   //
-  // Employee continues to belong to Designation.
-  // Designation continues to belong directly to Site.
+  // Attendance -> Department -> Work Type -> Site
+  // Employee   -> Designation
   // =========================================================
 
   private readonly attendanceListSelect = {
@@ -125,13 +125,6 @@ export class AttendanceRepository {
           select: {
             id: true,
             designationName: true,
-
-            site: {
-              select: {
-                id: true,
-                siteName: true,
-              },
-            },
           },
         },
       },
@@ -353,7 +346,8 @@ export class AttendanceRepository {
     // =======================================================
     // EMPLOYEE FILTERS
     //
-    // Employee -> Designation -> Site
+    // Employee -> Designation
+    // Designation is company-wide.
     // =======================================================
 
     if (designationId || search) {
