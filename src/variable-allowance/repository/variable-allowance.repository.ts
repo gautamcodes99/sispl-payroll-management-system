@@ -13,6 +13,23 @@ export class VariableAllowanceRepository {
       },
     });
   }
+  async findFinalizedPayrollRunForMonth(salaryMonth: Date) {
+    return this.prisma.payrollRun.findFirst({
+      where: {
+        salaryMonth,
+        status: 'FINALIZED',
+      },
+      orderBy: {
+        version: 'desc',
+      },
+      select: {
+        id: true,
+        version: true,
+        salaryMonth: true,
+        status: true,
+      },
+    });
+  }
 
   async findByEmployeeAndMonth(
     employeeId: number,

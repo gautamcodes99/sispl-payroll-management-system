@@ -230,6 +230,36 @@ export class AttendanceRepository {
       },
     });
   }
+  // =========================================================
+  // FINALIZED PAYROLL RUN FOR MONTH
+  //
+  // Used by Attendance Service to enforce the locked rule:
+  //
+  // FINALIZED payroll month = Attendance locked
+  // UNLOCKED payroll month  = Attendance editable
+  //
+  // SUPERSEDED historical runs do not lock Attendance.
+  // =========================================================
+
+  async findFinalizedPayrollRunForMonth(salaryMonth: Date) {
+    return this.prisma.payrollRun.findFirst({
+      where: {
+        salaryMonth,
+        status: 'FINALIZED',
+      },
+
+      orderBy: {
+        version: 'desc',
+      },
+
+      select: {
+        id: true,
+        version: true,
+        salaryMonth: true,
+        status: true,
+      },
+    });
+  }
 
   // =========================================================
   // CREATE

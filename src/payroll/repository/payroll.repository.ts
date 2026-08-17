@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { AttendanceStatus } from '@prisma/client';
+import { AttendanceStatus, PayrollRunStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
@@ -15,6 +15,7 @@ export class PayrollRepository {
       where: {
         id: employeeId,
       },
+
       include: {
         designation: {
           include: {
@@ -58,6 +59,7 @@ export class PayrollRepository {
           {
             status: 'ACTIVE',
           },
+
           {
             attendances: {
               some: {
@@ -65,6 +67,7 @@ export class PayrollRepository {
                   gte: periodStart,
                   lt: periodEndExclusive,
                 },
+
                 status: {
                   in: payrollStatuses,
                 },
@@ -89,15 +92,6 @@ export class PayrollRepository {
 
   // =========================================================
   // APPLICABLE WAGE MASTER
-  //
-  // Wage period is one calendar month.
-  //
-  // The Wage Master applicable on the first day of the
-  // salary month is used for that monthly wage period.
-  //
-  // Historical SUPERSEDED Wage Masters remain valid for
-  // historical payroll where their effective period covers
-  // the requested salary month.
   // =========================================================
 
   async findApplicableWageMaster(designationId: number, salaryMonth: Date) {
@@ -113,6 +107,7 @@ export class PayrollRepository {
           {
             effectiveTo: null,
           },
+
           {
             effectiveTo: {
               gte: salaryMonth,
@@ -204,6 +199,194 @@ export class PayrollRepository {
           salaryMonth,
         },
       },
+    });
+  }
+
+  // =========================================================
+  // FIND PAYROLL RUN BY ID
+  // =========================================================
+
+  async findPayrollRunById(id: number) {
+    return this.prisma.payrollRun.findUnique({
+      where: {
+        id,
+      },
+
+      include: {
+        snapshots: {
+          orderBy: {
+            employeeId: 'asc',
+          },
+        },
+      },
+    });
+  }
+
+  // =========================================================
+  // CURRENT PAYROLL RUN
+  //
+  // FINALIZED = locked
+  // UNLOCKED  = correction/reprocess pending
+  // =========================================================
+
+  async findCurrentPayrollRun(salaryMonth: Date) {
+    return this.prisma.payrollRun.findFirst({
+      where: {
+        salaryMonth,
+
+        status: {
+          in: [PayrollRunStatus.FINALIZED, PayrollRunStatus.UNLOCKED],
+        },
+      },
+
+      orderBy: {
+        version: 'desc',
+      },
+    });
+  }
+
+  // =========================================================
+  // LATEST PAYROLL VERSION
+  // =========================================================
+
+  async findLatestPayrollRun(salaryMonth: Date) {
+    return this.prisma.payrollRun.findFirst({
+      where: {
+        salaryMonth,
+      },
+
+      orderBy: {
+        version: 'desc',
+      },
+    });
+  }
+
+  // =========================================================
+  // FINALIZED PAYROLL FOR MONTH
+  //
+  // Used later by Attendance lock validation.
+  // =========================================================
+
+  async findFinalizedPayrollRunForMonth(salaryMonth: Date) {
+    return this.prisma.payrollRun.findFirst({
+      where: {
+        salaryMonth,
+        status: PayrollRunStatus.FINALIZED,
+      },
+
+      orderBy: {
+        version: 'desc',
+      },
+    });
+  }
+
+  // =========================================================
+  // CREATE FINALIZED PAYROLL
+  //
+  // PayrollRun + all employee snapshots are created in one
+  // database transaction.
+  // =========================================================
+
+  async createFinalizedPayrollRun(
+    salaryMonth: Date,
+    version: number,
+    snapshots: Prisma.PayrollEmployeeSnapshotUncheckedCreateWithoutPayrollRunInput[],
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      return tx.payrollRun.create({
+        data: {
+          salaryMonth,
+          version,
+          status: PayrollRunStatus.FINALIZED,
+          finalizedAt: new Date(),
+
+          snapshots: {
+            create: snapshots,
+          },
+        },
+
+        include: {
+          snapshots: {
+            orderBy: {
+              employeeId: 'asc',
+            },
+          },
+        },
+      });
+    });
+  }
+
+  // =========================================================
+  // UNLOCK PAYROLL
+  // =========================================================
+
+  async unlockPayrollRun(id: number) {
+    return this.prisma.payrollRun.update({
+      where: {
+        id,
+      },
+
+      data: {
+        status: PayrollRunStatus.UNLOCKED,
+        unlockedAt: new Date(),
+      },
+
+      include: {
+        snapshots: {
+          orderBy: {
+            employeeId: 'asc',
+          },
+        },
+      },
+    });
+  }
+
+  // =========================================================
+  // REPROCESS PAYROLL
+  //
+  // Old UNLOCKED version becomes SUPERSEDED.
+  // New version is created as FINALIZED.
+  //
+  // Both operations happen atomically.
+  // =========================================================
+
+  async reprocessPayrollRun(
+    oldPayrollRunId: number,
+    salaryMonth: Date,
+    version: number,
+    snapshots: Prisma.PayrollEmployeeSnapshotUncheckedCreateWithoutPayrollRunInput[],
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.payrollRun.update({
+        where: {
+          id: oldPayrollRunId,
+        },
+
+        data: {
+          status: PayrollRunStatus.SUPERSEDED,
+        },
+      });
+
+      return tx.payrollRun.create({
+        data: {
+          salaryMonth,
+          version,
+          status: PayrollRunStatus.FINALIZED,
+          finalizedAt: new Date(),
+
+          snapshots: {
+            create: snapshots,
+          },
+        },
+
+        include: {
+          snapshots: {
+            orderBy: {
+              employeeId: 'asc',
+            },
+          },
+        },
+      });
     });
   }
 }

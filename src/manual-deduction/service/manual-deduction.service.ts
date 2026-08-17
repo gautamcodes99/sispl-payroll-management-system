@@ -20,6 +20,27 @@ export class ManualDeductionService {
     return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
   }
 
+  // =========================================================
+  // PAYROLL LOCK
+  //
+  // FINALIZED = Manual Deduction locked
+  // UNLOCKED  = corrections allowed
+  // SUPERSEDED historical runs do not lock the month
+  // =========================================================
+
+  private async validateSalaryMonthUnlocked(salaryMonth: Date): Promise<void> {
+    const finalizedPayroll =
+      await this.manualDeductionRepository.findFinalizedPayrollRunForMonth(
+        salaryMonth,
+      );
+
+    if (finalizedPayroll) {
+      throw new ConflictException(
+        `Manual Deduction for ${salaryMonth.toISOString()} is locked because Payroll Run version ${finalizedPayroll.version} is finalized. Unlock payroll before modifying deductions.`,
+      );
+    }
+  }
+
   async create(dto: CreateManualDeductionDto) {
     const employee = await this.manualDeductionRepository.findEmployeeById(
       dto.employeeId,
@@ -32,6 +53,8 @@ export class ManualDeductionService {
     }
 
     const salaryMonth = this.normalizeSalaryMonth(dto.salaryMonth);
+
+    await this.validateSalaryMonthUnlocked(salaryMonth);
 
     const existing =
       await this.manualDeductionRepository.findByEmployeeAndMonth(
@@ -83,7 +106,9 @@ export class ManualDeductionService {
   }
 
   async update(id: number, dto: UpdateManualDeductionDto) {
-    await this.findOne(id);
+    const manualDeduction = await this.findOne(id);
+
+    await this.validateSalaryMonthUnlocked(manualDeduction.salaryMonth);
 
     return this.manualDeductionRepository.update(id, {
       ...(dto.advanceRecovery !== undefined && {

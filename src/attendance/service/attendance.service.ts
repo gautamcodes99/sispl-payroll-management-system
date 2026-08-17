@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { AttendanceRepository } from '../repository/attendance.repository';
 import { CreateAttendanceDto } from '../dto/create-attendance.dto';
 import { UpdateAttendanceDto } from '../dto/update-attendance.dto';
@@ -12,6 +16,48 @@ import { MonthlyAttendanceQueryDto } from '../dto/monthly-attendance-query.dto';
 @Injectable()
 export class AttendanceService {
   constructor(private readonly attendanceRepository: AttendanceRepository) {}
+
+  // =========================================================
+  // SALARY MONTH
+  // =========================================================
+
+  private normalizeSalaryMonth(date: Date): Date {
+    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+  }
+
+  // =========================================================
+  // PAYROLL / ATTENDANCE LOCK
+  //
+  // Locked lifecycle:
+  //
+  // Payroll FINALIZED
+  //   -> Attendance month is locked.
+  //
+  // Payroll UNLOCKED
+  //   -> Attendance corrections are allowed.
+  //
+  // Payroll SUPERSEDED
+  //   -> Historical only; does not lock the month.
+  //
+  // No lock flag is duplicated on Attendance rows.
+  // =========================================================
+
+  private async validateAttendanceMonthUnlocked(
+    attendanceDate: Date,
+  ): Promise<void> {
+    const salaryMonth = this.normalizeSalaryMonth(attendanceDate);
+
+    const finalizedPayroll =
+      await this.attendanceRepository.findFinalizedPayrollRunForMonth(
+        salaryMonth,
+      );
+
+    if (finalizedPayroll) {
+      throw new ConflictException(
+        `Attendance for ${salaryMonth.toISOString()} is locked because Payroll Run version ${finalizedPayroll.version} is finalized. Unlock payroll before modifying attendance.`,
+      );
+    }
+  }
 
   // =========================================================
   // VALIDATE ATTENDANCE CONTEXT
@@ -39,6 +85,7 @@ export class AttendanceService {
   ) {
     const [employee, department] = await Promise.all([
       this.attendanceRepository.findEmployeeAttendanceContext(employeeId),
+
       this.attendanceRepository.findDepartmentAttendanceContext(departmentId),
     ]);
 
@@ -101,6 +148,10 @@ export class AttendanceService {
   // =========================================================
 
   async create(createAttendanceDto: CreateAttendanceDto) {
+    const attendanceDate = new Date(createAttendanceDto.attendanceDate);
+
+    await this.validateAttendanceMonthUnlocked(attendanceDate);
+
     await this.validateAttendanceContext(
       createAttendanceDto.employeeId,
       createAttendanceDto.departmentId,
@@ -127,6 +178,7 @@ export class AttendanceService {
       success: true,
       message: 'Attendance records fetched successfully.',
       data: result.attendances,
+
       pagination: {
         page: query.page,
         limit: query.limit,
@@ -174,6 +226,10 @@ export class AttendanceService {
   // =========================================================
 
   async bulkCreateAttendance(bulkAttendanceDto: BulkAttendanceDto) {
+    const attendanceDate = new Date(bulkAttendanceDto.attendanceDate);
+
+    await this.validateAttendanceMonthUnlocked(attendanceDate);
+
     await this.validateBulkAttendanceContext(
       bulkAttendanceDto.employeeIds,
       bulkAttendanceDto.departmentId,
@@ -181,7 +237,7 @@ export class AttendanceService {
 
     const existingAttendances =
       await this.attendanceRepository.findExistingAttendance(
-        new Date(bulkAttendanceDto.attendanceDate),
+        attendanceDate,
         bulkAttendanceDto.employeeIds,
         bulkAttendanceDto.shift,
       );
@@ -189,8 +245,10 @@ export class AttendanceService {
     if (existingAttendances.length > 0) {
       return {
         success: false,
+
         message:
           'Attendance already exists for the selected employee(s) and shift.',
+
         data: {
           duplicates: existingAttendances.map((attendance) => ({
             employeeId: attendance.employeeId,
@@ -208,6 +266,7 @@ export class AttendanceService {
     return {
       success: true,
       message: 'Attendance marked successfully.',
+
       data: {
         processed: attendances.length,
       },
@@ -219,6 +278,10 @@ export class AttendanceService {
   // =========================================================
 
   async bulkUpdateOt(bulkOtUpdateDto: BulkOtUpdateDto) {
+    const attendanceDate = new Date(bulkOtUpdateDto.attendanceDate);
+
+    await this.validateAttendanceMonthUnlocked(attendanceDate);
+
     const results =
       await this.attendanceRepository.bulkUpdateOt(bulkOtUpdateDto);
 
@@ -227,6 +290,7 @@ export class AttendanceService {
     return {
       success: true,
       message: 'OT hours updated successfully.',
+
       data: {
         processed: updated,
       },
@@ -251,7 +315,9 @@ export class AttendanceService {
 
     return {
       success: true,
+
       message: 'Monthly attendance summary fetched successfully.',
+
       data: summary,
     };
   }
@@ -269,13 +335,27 @@ export class AttendanceService {
 
     return {
       success: true,
+
       message: 'Attendance record fetched successfully.',
+
       data: attendance,
     };
   }
 
   // =========================================================
   // UPDATE
+  //
+  // Important:
+  //
+  // If attendanceDate itself is being changed, BOTH:
+  //
+  // - original month
+  // - target month
+  //
+  // must be unlocked.
+  //
+  // This prevents moving attendance out of or into a locked
+  // payroll month.
   // =========================================================
 
   async updateAttendance(id: number, updateAttendanceDto: UpdateAttendanceDto) {
@@ -283,6 +363,33 @@ export class AttendanceService {
 
     if (!attendance) {
       throw new NotFoundException('Attendance record not found.');
+    }
+
+    // -------------------------------------------------------
+    // ORIGINAL MONTH
+    // -------------------------------------------------------
+
+    await this.validateAttendanceMonthUnlocked(attendance.attendanceDate);
+
+    // -------------------------------------------------------
+    // TARGET MONTH
+    //
+    // Required only if attendanceDate is being changed.
+    // -------------------------------------------------------
+
+    if (updateAttendanceDto.attendanceDate) {
+      const targetAttendanceDate = new Date(updateAttendanceDto.attendanceDate);
+
+      const originalMonth = this.normalizeSalaryMonth(
+        attendance.attendanceDate,
+      ).getTime();
+
+      const targetMonth =
+        this.normalizeSalaryMonth(targetAttendanceDate).getTime();
+
+      if (originalMonth !== targetMonth) {
+        await this.validateAttendanceMonthUnlocked(targetAttendanceDate);
+      }
     }
 
     const updatedAttendance = await this.attendanceRepository.updateAttendance(
@@ -307,6 +414,8 @@ export class AttendanceService {
     if (!attendance) {
       throw new NotFoundException('Attendance record not found.');
     }
+
+    await this.validateAttendanceMonthUnlocked(attendance.attendanceDate);
 
     await this.attendanceRepository.deleteAttendance(id);
 

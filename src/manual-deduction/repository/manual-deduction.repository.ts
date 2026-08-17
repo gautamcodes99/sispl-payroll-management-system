@@ -5,6 +5,23 @@ import { PrismaService } from '../../prisma/prisma.service';
 @Injectable()
 export class ManualDeductionRepository {
   constructor(private readonly prisma: PrismaService) {}
+  async findFinalizedPayrollRunForMonth(salaryMonth: Date) {
+    return this.prisma.payrollRun.findFirst({
+      where: {
+        salaryMonth,
+        status: 'FINALIZED',
+      },
+      orderBy: {
+        version: 'desc',
+      },
+      select: {
+        id: true,
+        version: true,
+        salaryMonth: true,
+        status: true,
+      },
+    });
+  }
 
   async findEmployeeById(employeeId: number) {
     return this.prisma.employee.findUnique({

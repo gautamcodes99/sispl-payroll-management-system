@@ -8,16 +8,16 @@ datasource db {
 }
 
 model Employee {
-  id                  Int                 @id @default(autoincrement())
+  id                  Int       @id @default(autoincrement())
   firstName           String
   lastName            String
-  email               String?             @unique
+  email               String?   @unique
   phone               String?
   joiningDate         DateTime
   basicSalary         Decimal
-  status              String              @default("ACTIVE")
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
+  status              String    @default("ACTIVE")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
   designationId       Int
   aadhaarNumber       String?
   accountHolderName   String?
@@ -38,10 +38,12 @@ model Employee {
   uanNumber           String?
   leftDate            DateTime?
   leftReason          String?
-  attendances         Attendance[]
-  designation         Designation         @relation(fields: [designationId], references: [id])
-  variableAllowances  VariableAllowance[]
-  manualDeductions    ManualDeduction[]
+
+  attendances        Attendance[]
+  designation        Designation               @relation(fields: [designationId], references: [id])
+  variableAllowances VariableAllowance[]
+  manualDeductions   ManualDeduction[]
+  payrollSnapshots   PayrollEmployeeSnapshot[]
 }
 
 model Site {
@@ -134,8 +136,9 @@ model WageMaster {
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
 
-  designation       Designation            @relation(fields: [designationId], references: [id], onDelete: Restrict)
+  designation       Designation               @relation(fields: [designationId], references: [id], onDelete: Restrict)
   specialAllowances SpecialAllowanceSlab[]
+  payrollSnapshots  PayrollEmployeeSnapshot[]
 
   @@unique([designationId, version])
   @@index([designationId, effectiveFrom])
@@ -193,6 +196,173 @@ model ManualDeduction {
   @@index([employeeId])
 }
 
+// =========================================================
+// PAYROLL RUN
+//
+// Represents one finalized/reprocessed company payroll
+// for one salary month.
+//
+// Preview is NOT stored here.
+// Preview remains calculation-only.
+//
+// Reprocessing creates a newer version.
+// Historical versions are preserved.
+// =========================================================
+
+model PayrollRun {
+  id          Int              @id @default(autoincrement())
+  salaryMonth DateTime
+  version     Int
+  status      PayrollRunStatus
+  finalizedAt DateTime?
+  unlockedAt  DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  snapshots PayrollEmployeeSnapshot[]
+
+  @@unique([salaryMonth, version])
+  @@index([salaryMonth, status])
+}
+
+// =========================================================
+// PAYROLL EMPLOYEE SNAPSHOT
+//
+// Stores the finalized payroll result for one employee.
+//
+// Historical values are copied into this record so reports
+// do not depend on future changes to Employee, Designation,
+// Site, Wage Master, Attendance, Allowances or Deductions.
+//
+// Money is persisted at 2 decimal places.
+// Payroll calculation itself may use full precision before
+// final snapshot values are created.
+// =========================================================
+
+model PayrollEmployeeSnapshot {
+  id           Int @id @default(autoincrement())
+  payrollRunId Int
+  employeeId   Int
+  wageMasterId Int
+
+  // ---------------------------------------------------------
+  // EMPLOYEE / ORGANISATION SNAPSHOT
+  // ---------------------------------------------------------
+
+  employeeName    String
+  gender          String?
+  designationId   Int
+  designationName String
+  siteId          Int
+  siteName        String
+
+  // ---------------------------------------------------------
+  // WAGE MASTER SNAPSHOT
+  // ---------------------------------------------------------
+
+  wageMasterVersion Int
+
+  // ---------------------------------------------------------
+  // ATTENDANCE SNAPSHOT
+  // ---------------------------------------------------------
+
+  presentDays  Decimal @db.Decimal(5, 1)
+  halfDays     Decimal @db.Decimal(5, 1)
+  paidHolidays Decimal @db.Decimal(5, 1)
+  payableDays  Decimal @db.Decimal(5, 1)
+  otHours      Decimal @db.Decimal(8, 2)
+
+  // ---------------------------------------------------------
+  // WAGE VALUES
+  // ---------------------------------------------------------
+
+  monthlyBasic Decimal @db.Decimal(14, 2)
+  monthlyDa    Decimal @db.Decimal(14, 2)
+
+  earnedBasic Decimal @db.Decimal(14, 2)
+  earnedDa    Decimal @db.Decimal(14, 2)
+  wages       Decimal @db.Decimal(14, 2)
+
+  hraPercentage Decimal @db.Decimal(5, 2)
+  hra           Decimal @db.Decimal(14, 2)
+
+  otRate   Decimal @db.Decimal(14, 2)
+  otAmount Decimal @db.Decimal(14, 2)
+
+  conveyance Decimal @db.Decimal(14, 2)
+
+  // ---------------------------------------------------------
+  // SPECIAL ALLOWANCE SNAPSHOT
+  //
+  // Slab fields are nullable because an employee may have
+  // payable days outside every configured slab.
+  // ---------------------------------------------------------
+
+  specialAllowanceRate    Decimal? @db.Decimal(14, 2)
+  specialAllowanceMinDays Decimal? @db.Decimal(5, 1)
+  specialAllowanceMaxDays Decimal? @db.Decimal(5, 1)
+  specialAllowanceAmount  Decimal  @db.Decimal(14, 2)
+
+  rab     Decimal @db.Decimal(14, 2)
+  arrears Decimal @db.Decimal(14, 2)
+
+  gross Decimal @db.Decimal(14, 2)
+
+  // ---------------------------------------------------------
+  // STATUTORY DEDUCTIONS
+  // ---------------------------------------------------------
+
+  pf   Decimal @db.Decimal(14, 2)
+  esic Decimal @db.Decimal(14, 2)
+  ptax Decimal @db.Decimal(14, 2)
+  mlwf Decimal @db.Decimal(14, 2)
+
+  statutoryDeductionTotal Decimal @db.Decimal(14, 2)
+
+  // ---------------------------------------------------------
+  // MANUAL DEDUCTIONS
+  // ---------------------------------------------------------
+
+  advanceRecovery Decimal @db.Decimal(14, 2)
+  canteen         Decimal @db.Decimal(14, 2)
+  transport       Decimal @db.Decimal(14, 2)
+  uniformRecovery Decimal @db.Decimal(14, 2)
+  fine            Decimal @db.Decimal(14, 2)
+  otherDeduction  Decimal @db.Decimal(14, 2)
+
+  manualDeductionTotal Decimal @db.Decimal(14, 2)
+
+  // ---------------------------------------------------------
+  // FINAL TOTALS
+  // ---------------------------------------------------------
+
+  totalDeductions Decimal @db.Decimal(14, 2)
+  netSalary       Decimal @db.Decimal(14, 2)
+
+  // ---------------------------------------------------------
+  // WARNINGS
+  //
+  // Example:
+  // ["Net salary is negative."]
+  // ---------------------------------------------------------
+
+  warnings Json?
+
+  createdAt DateTime @default(now())
+
+  // ---------------------------------------------------------
+  // RELATIONS
+  // ---------------------------------------------------------
+
+  payrollRun PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Restrict)
+  employee   Employee   @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  wageMaster WageMaster @relation(fields: [wageMasterId], references: [id], onDelete: Restrict)
+
+  @@unique([payrollRunId, employeeId])
+  @@index([employeeId])
+  @@index([wageMasterId])
+}
+
 enum AttendanceStatus {
   PRESENT
   ABSENT
@@ -216,5 +386,20 @@ enum WageMasterOtOption {
 enum WageMasterStatus {
   DRAFT
   ACTIVE
+  SUPERSEDED
+}
+
+// =========================================================
+// PAYROLL RUN STATUS
+//
+// FINALIZED  = payroll finalized and month locked
+// UNLOCKED   = corrections permitted before reprocessing
+// SUPERSEDED = older finalized version replaced by a newer
+//              reprocessed version; history remains intact
+// =========================================================
+
+enum PayrollRunStatus {
+  FINALIZED
+  UNLOCKED
   SUPERSEDED
 }

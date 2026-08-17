@@ -20,6 +20,27 @@ export class VariableAllowanceService {
     return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
   }
 
+  // =========================================================
+  // PAYROLL LOCK
+  //
+  // FINALIZED = Variable Allowance locked
+  // UNLOCKED  = corrections allowed
+  // SUPERSEDED historical runs do not lock the month
+  // =========================================================
+
+  private async validateSalaryMonthUnlocked(salaryMonth: Date): Promise<void> {
+    const finalizedPayroll =
+      await this.variableAllowanceRepository.findFinalizedPayrollRunForMonth(
+        salaryMonth,
+      );
+
+    if (finalizedPayroll) {
+      throw new ConflictException(
+        `Variable Allowance for ${salaryMonth.toISOString()} is locked because Payroll Run version ${finalizedPayroll.version} is finalized. Unlock payroll before modifying allowances.`,
+      );
+    }
+  }
+
   async create(dto: CreateVariableAllowanceDto) {
     const employee = await this.variableAllowanceRepository.findEmployeeById(
       dto.employeeId,
@@ -32,6 +53,8 @@ export class VariableAllowanceService {
     }
 
     const salaryMonth = this.normalizeSalaryMonth(dto.salaryMonth);
+
+    await this.validateSalaryMonthUnlocked(salaryMonth);
 
     const existing =
       await this.variableAllowanceRepository.findByEmployeeAndMonth(
@@ -81,7 +104,9 @@ export class VariableAllowanceService {
   }
 
   async update(id: number, dto: UpdateVariableAllowanceDto) {
-    await this.findOne(id);
+    const variableAllowance = await this.findOne(id);
+
+    await this.validateSalaryMonthUnlocked(variableAllowance.salaryMonth);
 
     return this.variableAllowanceRepository.update(id, {
       ...(dto.conveyance !== undefined && {
