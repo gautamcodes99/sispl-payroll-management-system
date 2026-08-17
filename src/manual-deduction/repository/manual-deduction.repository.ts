@@ -1,27 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { ManualDeduction, Prisma } from '@prisma/client';
+import { ManualDeduction, PayrollRunStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class ManualDeductionRepository {
   constructor(private readonly prisma: PrismaService) {}
-  async findFinalizedPayrollRunForMonth(salaryMonth: Date) {
-    return this.prisma.payrollRun.findFirst({
-      where: {
-        salaryMonth,
-        status: 'FINALIZED',
-      },
-      orderBy: {
-        version: 'desc',
-      },
-      select: {
-        id: true,
-        version: true,
-        salaryMonth: true,
-        status: true,
-      },
-    });
-  }
 
   async findEmployeeById(employeeId: number) {
     return this.prisma.employee.findUnique({
@@ -44,6 +27,22 @@ export class ManualDeductionRepository {
       },
     });
   }
+  // =========================================================
+  // FINALIZED PAYROLL LOCK
+  // =========================================================
+
+  async findFinalizedPayrollRunForMonth(salaryMonth: Date) {
+    return this.prisma.payrollRun.findFirst({
+      where: {
+        salaryMonth,
+        status: PayrollRunStatus.FINALIZED,
+      },
+
+      orderBy: {
+        version: 'desc',
+      },
+    });
+  }
 
   async create(
     data: Prisma.ManualDeductionCreateInput,
@@ -53,11 +52,7 @@ export class ManualDeductionRepository {
       include: {
         employee: {
           include: {
-            designation: {
-              include: {
-                site: true,
-              },
-            },
+            designation: true,
           },
         },
       },
@@ -74,17 +69,15 @@ export class ManualDeductionRepository {
           salaryMonth,
         }),
       },
+
       include: {
         employee: {
           include: {
-            designation: {
-              include: {
-                site: true,
-              },
-            },
+            designation: true,
           },
         },
       },
+
       orderBy: [
         {
           salaryMonth: 'desc',
@@ -101,14 +94,11 @@ export class ManualDeductionRepository {
       where: {
         id,
       },
+
       include: {
         employee: {
           include: {
-            designation: {
-              include: {
-                site: true,
-              },
-            },
+            designation: true,
           },
         },
       },
@@ -123,15 +113,13 @@ export class ManualDeductionRepository {
       where: {
         id,
       },
+
       data,
+
       include: {
         employee: {
           include: {
-            designation: {
-              include: {
-                site: true,
-              },
-            },
+            designation: true,
           },
         },
       },

@@ -66,13 +66,6 @@ export class EmployeeRepository {
       select: {
         id: true,
         designationName: true,
-
-        site: {
-          select: {
-            id: true,
-            siteName: true,
-          },
-        },
       },
     },
 

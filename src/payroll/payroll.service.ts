@@ -60,9 +60,8 @@ export class PayrollService {
 
       designationId: payroll.employee.designation.id,
       designationName: payroll.employee.designation.designationName,
-
-      siteId: payroll.employee.site.id,
-      siteName: payroll.employee.site.siteName,
+      siteId: null,
+      siteName: null,
 
       bankName: payroll.employee.bankName,
       accountHolderName: payroll.employee.accountHolderName,

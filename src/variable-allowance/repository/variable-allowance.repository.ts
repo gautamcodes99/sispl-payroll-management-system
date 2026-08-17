@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma, VariableAllowance } from '@prisma/client';
+import { PayrollRunStatus, Prisma, VariableAllowance } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
@@ -13,20 +13,20 @@ export class VariableAllowanceRepository {
       },
     });
   }
+
+  // =========================================================
+  // FINALIZED PAYROLL LOCK
+  // =========================================================
+
   async findFinalizedPayrollRunForMonth(salaryMonth: Date) {
     return this.prisma.payrollRun.findFirst({
       where: {
         salaryMonth,
-        status: 'FINALIZED',
+        status: PayrollRunStatus.FINALIZED,
       },
+
       orderBy: {
         version: 'desc',
-      },
-      select: {
-        id: true,
-        version: true,
-        salaryMonth: true,
-        status: true,
       },
     });
   }
@@ -50,14 +50,11 @@ export class VariableAllowanceRepository {
   ): Promise<VariableAllowance> {
     return this.prisma.variableAllowance.create({
       data,
+
       include: {
         employee: {
           include: {
-            designation: {
-              include: {
-                site: true,
-              },
-            },
+            designation: true,
           },
         },
       },
@@ -74,17 +71,15 @@ export class VariableAllowanceRepository {
           salaryMonth,
         }),
       },
+
       include: {
         employee: {
           include: {
-            designation: {
-              include: {
-                site: true,
-              },
-            },
+            designation: true,
           },
         },
       },
+
       orderBy: [
         {
           salaryMonth: 'desc',
@@ -101,14 +96,11 @@ export class VariableAllowanceRepository {
       where: {
         id,
       },
+
       include: {
         employee: {
           include: {
-            designation: {
-              include: {
-                site: true,
-              },
-            },
+            designation: true,
           },
         },
       },
@@ -123,15 +115,13 @@ export class VariableAllowanceRepository {
       where: {
         id,
       },
+
       data,
+
       include: {
         employee: {
           include: {
-            designation: {
-              include: {
-                site: true,
-              },
-            },
+            designation: true,
           },
         },
       },

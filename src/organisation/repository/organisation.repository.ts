@@ -232,7 +232,7 @@ export class OrganisationRepository {
   // DESIGNATION
   // =========================================================
   //
-  // Designation is a master record under Site.
+  // Designation is a company-wide master.
   //
   // Initial master designations:
   // - Unskilled
@@ -241,7 +241,10 @@ export class OrganisationRepository {
   // - Supervisor
   // - Manager
   //
-  // A Site can have its own designation records.
+  // Designation does NOT belong to Site.
+  //
+  // Site remains:
+  // Site -> Work Type -> Department
   // =========================================================
 
   async createDesignation(createDesignationDto: CreateDesignationDto) {
@@ -252,24 +255,13 @@ export class OrganisationRepository {
 
   async findDesignations() {
     return this.prisma.designation.findMany({
-      include: {
-        site: {
-          select: {
-            id: true,
-            siteName: true,
-          },
-        },
+      where: {
+        status: 'ACTIVE',
       },
-      orderBy: [
-        {
-          site: {
-            siteName: 'asc',
-          },
-        },
-        {
-          designationName: 'asc',
-        },
-      ],
+
+      orderBy: {
+        designationName: 'asc',
+      },
     });
   }
 
@@ -277,14 +269,6 @@ export class OrganisationRepository {
     return this.prisma.designation.findUnique({
       where: {
         id,
-      },
-      include: {
-        site: {
-          select: {
-            id: true,
-            siteName: true,
-          },
-        },
       },
     });
   }
@@ -297,15 +281,8 @@ export class OrganisationRepository {
       where: {
         id,
       },
+
       data: updateDesignationDto,
-      include: {
-        site: {
-          select: {
-            id: true,
-            siteName: true,
-          },
-        },
-      },
     });
   }
 
@@ -317,6 +294,7 @@ export class OrganisationRepository {
       where: {
         id,
       },
+
       data: {
         status: updateDesignationStatusDto.status,
       },

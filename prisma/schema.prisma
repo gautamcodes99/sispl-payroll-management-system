@@ -47,7 +47,7 @@ model Employee {
 }
 
 model Site {
-  id            Int           @id @default(autoincrement())
+  id            Int        @id @default(autoincrement())
   siteName      String
   address       String?
   city          String?
@@ -55,10 +55,9 @@ model Site {
   pinCode       String?
   contactPerson String?
   contactNumber String?
-  status        String        @default("ACTIVE")
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  designations  Designation[]
+  status        String     @default("ACTIVE")
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
   workTypes     WorkType[]
 }
 
@@ -90,17 +89,13 @@ model Department {
 
 model Designation {
   id              Int      @id @default(autoincrement())
-  designationName String
+  designationName String   @unique
   status          String   @default("ACTIVE")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
-  siteId          Int
 
-  site        Site         @relation(fields: [siteId], references: [id], onDelete: Cascade)
   employees   Employee[]
   wageMasters WageMaster[]
-
-  @@unique([siteId, designationName])
 }
 
 model Attendance {
@@ -232,7 +227,14 @@ model PayrollRun {
 //
 // Historical values are copied into this record so reports
 // do not depend on future changes to Employee, Designation,
-// Site, Wage Master, Attendance, Allowances or Deductions.
+// Wage Master, Attendance, Allowances or Deductions.
+//
+// Site fields are nullable because Site is operational
+// attendance context, not a property of Designation.
+//
+// Existing historical snapshots may retain their old Site
+// values. Future payroll snapshots must not fabricate a Site
+// from Designation.
 //
 // Money is persisted at 2 decimal places.
 // Payroll calculation itself may use full precision before
@@ -253,8 +255,8 @@ model PayrollEmployeeSnapshot {
   gender          String?
   designationId   Int
   designationName String
-  siteId          Int
-  siteName        String
+  siteId          Int?
+  siteName        String?
 
   bankName          String?
   accountHolderName String?

@@ -247,7 +247,7 @@ export class OrganisationService {
   // DESIGNATION
   // =========================================================
   //
-  // Designation is a master record under Site.
+  // Designation is a company-wide master.
   //
   // Initial master designations:
   // - Unskilled
@@ -256,12 +256,18 @@ export class OrganisationService {
   // - Supervisor
   // - Manager
   //
-  // HR can create additional designations for a Site.
+  // HR may create additional company-wide designations.
+  //
+  // Designation does NOT belong to Site.
+  //
+  // Organisation hierarchy remains:
+  //
+  // Site
+  //   -> Work Type
+  //      -> Department
   // =========================================================
-  async createDesignation(createDesignationDto: CreateDesignationDto) {
-    // Verify Site exists
-    await this.findSiteById(createDesignationDto.siteId);
 
+  async createDesignation(createDesignationDto: CreateDesignationDto) {
     const designation =
       await this.organisationRepository.createDesignation(createDesignationDto);
 
@@ -287,7 +293,7 @@ export class OrganisationService {
       await this.organisationRepository.findDesignationById(id);
 
     if (!designation) {
-      throw new NotFoundException('Record not found.');
+      throw new NotFoundException('Designation not found.');
     }
 
     return {
@@ -302,11 +308,6 @@ export class OrganisationService {
     updateDesignationDto: UpdateDesignationDto,
   ) {
     await this.findDesignationById(id);
-
-    // Verify Site exists only if siteId is being changed
-    if (updateDesignationDto.siteId !== undefined) {
-      await this.findSiteById(updateDesignationDto.siteId);
-    }
 
     const designation = await this.organisationRepository.updateDesignation(
       id,

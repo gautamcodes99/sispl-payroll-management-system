@@ -72,13 +72,6 @@ export class AttendanceRepository {
           select: {
             id: true,
             designationName: true,
-
-            site: {
-              select: {
-                id: true,
-                siteName: true,
-              },
-            },
           },
         },
       },
@@ -159,12 +152,6 @@ export class AttendanceRepository {
 
       select: {
         id: true,
-
-        designation: {
-          select: {
-            siteId: true,
-          },
-        },
       },
     });
   }
@@ -185,12 +172,6 @@ export class AttendanceRepository {
 
       select: {
         id: true,
-
-        designation: {
-          select: {
-            siteId: true,
-          },
-        },
       },
     });
   }
@@ -477,13 +458,6 @@ export class AttendanceRepository {
           select: {
             id: true,
             designationName: true,
-
-            site: {
-              select: {
-                id: true,
-                siteName: true,
-              },
-            },
           },
         },
       },

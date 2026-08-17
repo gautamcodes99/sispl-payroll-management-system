@@ -363,10 +363,7 @@ export class PayrollCalculationService {
           designationName: employee.designation.designationName,
         },
 
-        site: {
-          id: employee.designation.site.id,
-          siteName: employee.designation.site.siteName,
-        },
+        site: null,
       },
 
       salaryMonth: salaryMonth.toISOString(),

@@ -17,11 +17,7 @@ export class PayrollRepository {
       },
 
       include: {
-        designation: {
-          include: {
-            site: true,
-          },
-        },
+        designation: true,
       },
     });
   }
@@ -91,7 +87,15 @@ export class PayrollRepository {
   }
 
   // =========================================================
-  // APPLICABLE WAGE MASTER
+  // APPLICABLE COMPANY-WIDE WAGE MASTER
+  //
+  // Wage Master belongs to company-wide Designation.
+  //
+  // The Wage Master applicable on the first day of the salary
+  // month is used.
+  //
+  // Historical SUPERSEDED Wage Masters remain valid where
+  // their effective period covers the requested salary month.
   // =========================================================
 
   async findApplicableWageMaster(designationId: number, salaryMonth: Date) {
@@ -121,11 +125,7 @@ export class PayrollRepository {
       },
 
       include: {
-        designation: {
-          include: {
-            site: true,
-          },
-        },
+        designation: true,
 
         specialAllowances: {
           orderBy: {
@@ -201,13 +201,9 @@ export class PayrollRepository {
       },
     });
   }
+
   // =========================================================
   // PAYROLL RUN HISTORY
-  //
-  // Optional salary-month filter.
-  //
-  // Returns lightweight run metadata for frontend history
-  // screens without loading every employee snapshot.
   // =========================================================
 
   async findPayrollRuns(salaryMonth?: Date) {
@@ -239,9 +235,6 @@ export class PayrollRepository {
 
   // =========================================================
   // CURRENT PAYROLL RUN WITH SNAPSHOTS
-  //
-  // Current means the latest non-superseded version:
-  // FINALIZED or UNLOCKED.
   // =========================================================
 
   async findCurrentPayrollRunWithSnapshots(salaryMonth: Date) {
@@ -290,9 +283,6 @@ export class PayrollRepository {
 
   // =========================================================
   // CURRENT PAYROLL RUN
-  //
-  // FINALIZED = locked
-  // UNLOCKED  = correction/reprocess pending
   // =========================================================
 
   async findCurrentPayrollRun(salaryMonth: Date) {
@@ -329,8 +319,6 @@ export class PayrollRepository {
 
   // =========================================================
   // FINALIZED PAYROLL FOR MONTH
-  //
-  // Used later by Attendance lock validation.
   // =========================================================
 
   async findFinalizedPayrollRunForMonth(salaryMonth: Date) {
@@ -348,9 +336,6 @@ export class PayrollRepository {
 
   // =========================================================
   // CREATE FINALIZED PAYROLL
-  //
-  // PayrollRun + all employee snapshots are created in one
-  // database transaction.
   // =========================================================
 
   async createFinalizedPayrollRun(
@@ -409,11 +394,6 @@ export class PayrollRepository {
 
   // =========================================================
   // REPROCESS PAYROLL
-  //
-  // Old UNLOCKED version becomes SUPERSEDED.
-  // New version is created as FINALIZED.
-  //
-  // Both operations happen atomically.
   // =========================================================
 
   async reprocessPayrollRun(
