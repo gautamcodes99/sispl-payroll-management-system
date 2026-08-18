@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -40,5 +41,10 @@ export class ManualDeductionController {
     @Body() dto: UpdateManualDeductionDto,
   ) {
     return this.manualDeductionService.update(id, dto);
+  }
+
+  @Delete(':id')
+  async remove(@Param('id', ParseIntPipe) id: number) {
+    return this.manualDeductionService.remove(id);
   }
 }

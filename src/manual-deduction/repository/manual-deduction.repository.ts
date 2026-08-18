@@ -27,6 +27,7 @@ export class ManualDeductionRepository {
       },
     });
   }
+
   // =========================================================
   // FINALIZED PAYROLL LOCK
   // =========================================================
@@ -49,6 +50,7 @@ export class ManualDeductionRepository {
   ): Promise<ManualDeduction> {
     return this.prisma.manualDeduction.create({
       data,
+
       include: {
         employee: {
           include: {
@@ -122,6 +124,14 @@ export class ManualDeductionRepository {
             designation: true,
           },
         },
+      },
+    });
+  }
+
+  async delete(id: number): Promise<ManualDeduction> {
+    return this.prisma.manualDeduction.delete({
+      where: {
+        id,
       },
     });
   }

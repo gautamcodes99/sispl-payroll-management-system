@@ -131,4 +131,12 @@ export class ManualDeductionService {
       }),
     });
   }
+
+  async remove(id: number) {
+    const manualDeduction = await this.findOne(id);
+
+    await this.validateSalaryMonthUnlocked(manualDeduction.salaryMonth);
+
+    return this.manualDeductionRepository.delete(id);
+  }
 }
