@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -40,5 +41,10 @@ export class VariableAllowanceController {
     @Body() dto: UpdateVariableAllowanceDto,
   ) {
     return this.variableAllowanceService.update(id, dto);
+  }
+
+  @Delete(':id')
+  async remove(@Param('id', ParseIntPipe) id: number) {
+    return this.variableAllowanceService.remove(id);
   }
 }

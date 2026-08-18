@@ -120,4 +120,12 @@ export class VariableAllowanceService {
       }),
     });
   }
+
+  async remove(id: number) {
+    const variableAllowance = await this.findOne(id);
+
+    await this.validateSalaryMonthUnlocked(variableAllowance.salaryMonth);
+
+    return this.variableAllowanceRepository.delete(id);
+  }
 }

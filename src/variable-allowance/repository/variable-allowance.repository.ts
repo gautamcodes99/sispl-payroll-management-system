@@ -127,4 +127,12 @@ export class VariableAllowanceRepository {
       },
     });
   }
+
+  async delete(id: number): Promise<VariableAllowance> {
+    return this.prisma.variableAllowance.delete({
+      where: {
+        id,
+      },
+    });
+  }
 }
