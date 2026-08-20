@@ -20,20 +20,71 @@ import { UpdateEmployeeBankDto } from '../dto/update-employee-bank.dto';
 import { UpdateEmployeeStatutoryDto } from '../dto/update-employee-statutory.dto';
 import { UpdateEmployeeNomineeDto } from '../dto/update-employee-nominee.dto';
 import { UpdateEmployeeEmploymentDto } from '../dto/update-employee-employment.dto';
+import { ImportEmployeesDto } from '../dto/import-employees.dto';
 
 @Controller('employees')
 export class EmployeeController {
   constructor(private readonly employeeService: EmployeeService) {}
+
+  // =========================================================
+  // EMPLOYEE LIST
+  // =========================================================
 
   @Get()
   findAll(@Query() query: EmployeeQueryDto) {
     return this.employeeService.findEmployees(query);
   }
 
+  // =========================================================
+  // EMPLOYEE EXCEL IMPORT VALIDATION
+  //
+  // Validates the complete workbook payload.
+  // Does not insert any employees.
+  // =========================================================
+
+  @Post('import/validate')
+  validateImport(@Body() importEmployeesDto: ImportEmployeesDto) {
+    return this.employeeService.validateImport(importEmployeesDto);
+  }
+
+  // =========================================================
+  // EMPLOYEE EXCEL IMPORT
+  //
+  // Revalidates the complete workbook before insertion.
+  // Import is all-or-nothing.
+  // =========================================================
+
+  @Post('import')
+  importEmployees(@Body() importEmployeesDto: ImportEmployeesDto) {
+    return this.employeeService.importEmployees(importEmployeesDto);
+  }
+
+  // =========================================================
+  // EMPLOYEE EXCEL EXPORT
+  //
+  // Returns the complete Employee Master dataset.
+  //
+  // IMPORTANT:
+  // This static route must remain before @Get(':id').
+  // =========================================================
+
+  @Get('export')
+  exportEmployees() {
+    return this.employeeService.exportEmployees();
+  }
+
+  // =========================================================
+  // EMPLOYEE DETAIL
+  // =========================================================
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.employeeService.findEmployeeById(id);
   }
+
+  // =========================================================
+  // PROFILE
+  // =========================================================
 
   @Patch(':id/profile')
   updateEmployeeProfile(
@@ -46,6 +97,10 @@ export class EmployeeController {
     );
   }
 
+  // =========================================================
+  // EMPLOYMENT
+  // =========================================================
+
   @Patch(':id/employment')
   updateEmployeeEmployment(
     @Param('id', ParseIntPipe) id: number,
@@ -56,6 +111,10 @@ export class EmployeeController {
       updateEmployeeEmploymentDto,
     );
   }
+
+  // =========================================================
+  // ADDRESS
+  // =========================================================
 
   @Patch(':id/address')
   updateEmployeeAddress(
@@ -68,6 +127,10 @@ export class EmployeeController {
     );
   }
 
+  // =========================================================
+  // BANK DETAILS
+  // =========================================================
+
   @Patch(':id/bank-details')
   updateEmployeeBankDetails(
     @Param('id', ParseIntPipe) id: number,
@@ -78,6 +141,10 @@ export class EmployeeController {
       updateEmployeeBankDto,
     );
   }
+
+  // =========================================================
+  // STATUTORY DETAILS
+  // =========================================================
 
   @Patch(':id/statutory-details')
   updateEmployeeStatutoryDetails(
@@ -90,6 +157,10 @@ export class EmployeeController {
     );
   }
 
+  // =========================================================
+  // NOMINEE
+  // =========================================================
+
   @Patch(':id/nominee')
   updateEmployeeNominee(
     @Param('id', ParseIntPipe) id: number,
@@ -101,6 +172,10 @@ export class EmployeeController {
     );
   }
 
+  // =========================================================
+  // STATUS
+  // =========================================================
+
   @Patch(':id/status')
   updateStatus(
     @Param('id', ParseIntPipe) id: number,
@@ -111,6 +186,10 @@ export class EmployeeController {
       updateEmployeeStatusDto,
     );
   }
+
+  // =========================================================
+  // CREATE EMPLOYEE
+  // =========================================================
 
   @Post()
   create(@Body() createEmployeeDto: CreateEmployeeDto) {

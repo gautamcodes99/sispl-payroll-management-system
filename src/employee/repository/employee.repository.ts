@@ -11,6 +11,7 @@ import { UpdateEmployeeAddressDto } from '../dto/update-employee-address.dto';
 import { UpdateEmployeeBankDto } from '../dto/update-employee-bank.dto';
 import { UpdateEmployeeStatutoryDto } from '../dto/update-employee-statutory.dto';
 import { UpdateEmployeeNomineeDto } from '../dto/update-employee-nominee.dto';
+import { ImportEmployeeRowDto } from '../dto/import-employees.dto';
 
 @Injectable()
 export class EmployeeRepository {
@@ -151,16 +152,11 @@ export class EmployeeRepository {
     // EMPLOYEE SEARCH
     //
     // Supports:
-    //
     // 1. Employee ID
     // 2. First Name
     // 3. Last Name
     // 4. Email
     // 5. Phone
-    //
-    // This is required by the Attendance employee search:
-    //
-    // "Search employee by ID or name"
     // =======================================================
 
     if (search?.trim()) {
@@ -195,15 +191,6 @@ export class EmployeeRepository {
           },
         },
       ];
-
-      // -----------------------------------------------------
-      // NUMERIC EMPLOYEE ID SEARCH
-      //
-      // Prisma Employee.id is an integer.
-      //
-      // Only add the ID condition when the search contains
-      // only numeric characters.
-      // -----------------------------------------------------
 
       if (/^\d+$/.test(normalizedSearch)) {
         searchConditions.unshift({
@@ -448,5 +435,223 @@ export class EmployeeRepository {
         leftDate: true,
       },
     });
+  }
+
+  // =========================================================
+  // EMPLOYEE EXCEL EXPORT
+  //
+  // Complete Employee Master dataset.
+  //
+  // Photo is intentionally excluded from Excel.
+  // Existing photo field/backend code remains untouched.
+  // =========================================================
+
+  async getEmployeesForExport() {
+    return this.prisma.employee.findMany({
+      orderBy: {
+        id: 'asc',
+      },
+
+      select: {
+        id: true,
+
+        // Personal Information
+        firstName: true,
+        lastName: true,
+        fatherName: true,
+        dateOfBirth: true,
+        gender: true,
+        phone: true,
+        email: true,
+
+        // Employment
+        joiningDate: true,
+        basicSalary: true,
+        status: true,
+        leftReason: true,
+        leftDate: true,
+
+        designation: {
+          select: {
+            id: true,
+            designationName: true,
+          },
+        },
+
+        // Address
+        presentAddress: true,
+        permanentAddress: true,
+
+        // Bank Details
+        bankName: true,
+        accountHolderName: true,
+        accountNumber: true,
+        ifscCode: true,
+
+        // Statutory
+        aadhaarNumber: true,
+        panNumber: true,
+        uanNumber: true,
+        esicNumber: true,
+
+        // Nominee
+        nomineeName: true,
+        nomineeRelationship: true,
+        nomineeMobile: true,
+      },
+    });
+  }
+
+  // =========================================================
+  // EMPLOYEE EXCEL IMPORT
+  // =========================================================
+
+  // ---------------------------------------------------------
+  // ACTIVE DESIGNATIONS
+  //
+  // Employee import may only use an existing ACTIVE
+  // company-wide Designation master.
+  // ---------------------------------------------------------
+
+  async findActiveDesignationsForImport() {
+    return this.prisma.designation.findMany({
+      where: {
+        status: 'ACTIVE',
+      },
+
+      select: {
+        id: true,
+        designationName: true,
+      },
+
+      orderBy: {
+        designationName: 'asc',
+      },
+    });
+  }
+
+  // ---------------------------------------------------------
+  // EXISTING EMAILS
+  //
+  // Employee.email is currently the database-level unique
+  // employee field.
+  // ---------------------------------------------------------
+
+  async findExistingEmployeeEmails(emails: string[]) {
+    if (emails.length === 0) {
+      return [];
+    }
+
+    return this.prisma.employee.findMany({
+      where: {
+        email: {
+          in: emails,
+        },
+      },
+
+      select: {
+        id: true,
+        email: true,
+      },
+    });
+  }
+
+  // ---------------------------------------------------------
+  // ATOMIC ORDERED IMPORT
+  //
+  // 1. Complete validation occurs first.
+  // 2. Any validation error prevents this method being called.
+  // 3. All rows are created in one transaction.
+  // 4. Rows are created sequentially in workbook order.
+  // 5. PostgreSQL generates Employee IDs.
+  // 6. Any database failure rolls back the complete import.
+  // ---------------------------------------------------------
+
+  async importEmployees(
+    rows: Array<{
+      row: ImportEmployeeRowDto;
+      designationId: number;
+      joiningDate: Date;
+      dateOfBirth: Date | null;
+      leftDate: Date | null;
+    }>,
+  ) {
+    return this.prisma.$transaction(
+      async (tx) => {
+        const createdEmployees: Array<{
+          id: number;
+          firstName: string;
+          lastName: string;
+        }> = [];
+
+        for (const item of rows) {
+          const { row, designationId, joiningDate, dateOfBirth, leftDate } =
+            item;
+
+          const employee = await tx.employee.create({
+            data: {
+              firstName: row.firstName.trim(),
+              lastName: row.lastName.trim(),
+
+              fatherName: row.fatherName?.trim() || null,
+              dateOfBirth,
+              gender: row.gender?.trim() || null,
+
+              phone: row.phone.trim(),
+              email: row.email?.trim() || null,
+
+              joiningDate,
+              basicSalary: row.basicSalary,
+
+              status: row.status ?? 'ACTIVE',
+
+              leftReason:
+                (row.status ?? 'ACTIVE') === 'ACTIVE'
+                  ? null
+                  : row.leftReason?.trim() || null,
+
+              leftDate: (row.status ?? 'ACTIVE') === 'ACTIVE' ? null : leftDate,
+
+              presentAddress: row.presentAddress?.trim() || null,
+              permanentAddress: row.permanentAddress?.trim() || null,
+
+              bankName: row.bankName?.trim() || null,
+              accountHolderName: row.accountHolderName?.trim() || null,
+              accountNumber: row.accountNumber?.trim() || null,
+              ifscCode: row.ifscCode?.trim() || null,
+
+              aadhaarNumber: row.aadhaarNumber?.trim() || null,
+              panNumber: row.panNumber?.trim() || null,
+              uanNumber: row.uanNumber?.trim() || null,
+              esicNumber: row.esicNumber?.trim() || null,
+
+              nomineeName: row.nomineeName?.trim() || null,
+              nomineeRelationship: row.nomineeRelationship?.trim() || null,
+              nomineeMobile: row.nomineeMobile?.trim() || null,
+
+              designation: {
+                connect: {
+                  id: designationId,
+                },
+              },
+            },
+
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+            },
+          });
+
+          createdEmployees.push(employee);
+        }
+
+        return createdEmployees;
+      },
+      {
+        maxWait: 10000,
+        timeout: 120000,
+      },
+    );
   }
 }
