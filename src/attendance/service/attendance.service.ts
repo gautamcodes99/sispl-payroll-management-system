@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -12,6 +13,10 @@ import { AttendanceDashboardQueryDto } from '../dto/attendance-dashboard-query.d
 import { BulkAttendanceDto } from '../dto/bulk-attendance.dto';
 import { BulkOtUpdateDto } from '../dto/bulk-ot-update.dto';
 import { MonthlyAttendanceQueryDto } from '../dto/monthly-attendance-query.dto';
+import { AttendanceReportQueryDto } from '../dto/attendance-report-query.dto';
+import { AttendanceStatus } from '@prisma/client';
+import { FormXxiiiReportQueryDto } from '../dto/form-xxiii-report-query.dto';
+import { MusterCutFileQueryDto } from '../dto/muster-cut-file-query.dto';
 
 @Injectable()
 export class AttendanceService {
@@ -319,6 +324,1791 @@ export class AttendanceService {
       message: 'Monthly attendance summary fetched successfully.',
 
       data: summary,
+    };
+  }
+  // =========================================================
+  // ATTENDANCE REPORT HELPERS
+  // =========================================================
+
+  private mapAttendanceStatusToReportCode(status: AttendanceStatus): string {
+    switch (status) {
+      case 'PRESENT':
+        return 'P';
+
+      case 'ABSENT':
+        return 'A';
+
+      case 'WEEKLY_OFF':
+        return 'WO';
+
+      case 'HALF_DAY':
+        return 'HD';
+
+      case 'PAID_HOLIDAY':
+        return 'PH';
+
+      // LEAVE and HOLIDAY are intentionally ignored
+      // in the finalized Attendance Reports specification.
+      case 'LEAVE':
+      case 'HOLIDAY':
+      default:
+        return '';
+    }
+  }
+
+  private calculateAttendanceReportAge(
+    dateOfBirth: Date | null,
+    reportEndDate: Date,
+  ): number | null {
+    if (!dateOfBirth) {
+      return null;
+    }
+
+    let age = reportEndDate.getUTCFullYear() - dateOfBirth.getUTCFullYear();
+
+    const reportMonth = reportEndDate.getUTCMonth();
+    const birthMonth = dateOfBirth.getUTCMonth();
+
+    if (
+      reportMonth < birthMonth ||
+      (reportMonth === birthMonth &&
+        reportEndDate.getUTCDate() < dateOfBirth.getUTCDate())
+    ) {
+      age -= 1;
+    }
+
+    return age;
+  }
+
+  // =========================================================
+  // MUSTER REPORT
+  //
+  // Output:
+  //
+  // Sr No
+  // Employee ID
+  // Employee Name
+  // Age
+  // Sex
+  // DOJ
+  // Designation
+  // Dynamic day columns
+  // Days
+  // PH
+  //
+  // Report attendance codes:
+  //
+  // PRESENT      -> P
+  // ABSENT       -> A
+  // WEEKLY_OFF   -> WO
+  // HALF_DAY     -> HD
+  // PAID_HOLIDAY -> PH
+  //
+  // LEAVE / HOLIDAY are ignored.
+  //
+  // Mandays:
+  //
+  // P  = 1
+  // HD = 0.5
+  // =========================================================
+
+  async getMusterReport(query: AttendanceReportQueryDto) {
+    // -------------------------------------------------------
+    // ORGANISATION CONTEXT VALIDATION
+    // -------------------------------------------------------
+
+    const department =
+      await this.attendanceRepository.findAttendanceReportDepartmentContext(
+        query.departmentId,
+      );
+
+    if (!department) {
+      throw new NotFoundException('Department not found.');
+    }
+
+    if (department.workTypeId !== query.workTypeId) {
+      throw new BadRequestException(
+        'Selected Department does not belong to the selected Work Type.',
+      );
+    }
+
+    if (department.workType.siteId !== query.siteId) {
+      throw new BadRequestException(
+        'Selected Work Type does not belong to the selected Site.',
+      );
+    }
+
+    // -------------------------------------------------------
+    // MONTH
+    // -------------------------------------------------------
+
+    const daysInMonth = new Date(
+      Date.UTC(query.year, query.month, 0),
+    ).getUTCDate();
+
+    const reportEndDate = new Date(
+      Date.UTC(query.year, query.month - 1, daysInMonth),
+    );
+
+    // -------------------------------------------------------
+    // RAW ATTENDANCE
+    // -------------------------------------------------------
+
+    const attendances =
+      await this.attendanceRepository.findMonthlyAttendanceReportData(query);
+
+    // -------------------------------------------------------
+    // EMPLOYEE GROUPING
+    // -------------------------------------------------------
+
+    type MusterEmployeeAccumulator = {
+      employeeId: number;
+      employeeName: string;
+      dateOfBirth: Date | null;
+      gender: string | null;
+      joiningDate: Date;
+      designationId: number;
+      designationName: string;
+      attendanceByDay: Map<number, string>;
+    };
+
+    const employeeMap = new Map<number, MusterEmployeeAccumulator>();
+
+    for (const attendance of attendances) {
+      const employee = attendance.employee;
+
+      let accumulator = employeeMap.get(employee.id);
+
+      if (!accumulator) {
+        accumulator = {
+          employeeId: employee.id,
+          employeeName: `${employee.firstName} ${employee.lastName}`.trim(),
+          dateOfBirth: employee.dateOfBirth,
+          gender: employee.gender,
+          joiningDate: employee.joiningDate,
+          designationId: employee.designation.id,
+          designationName: employee.designation.designationName,
+          attendanceByDay: new Map<number, string>(),
+        };
+
+        employeeMap.set(employee.id, accumulator);
+      }
+
+      const day = attendance.attendanceDate.getUTCDate();
+
+      const code = this.mapAttendanceStatusToReportCode(attendance.status);
+
+      if (!code) {
+        continue;
+      }
+
+      /*
+       * Muster contains one attendance code per employee/date.
+       *
+       * If the query is not shift-filtered and more than one
+       * attendance row exists for the same employee/date,
+       * preserve the first valid attendance code returned by
+       * the ordered database query rather than double-counting.
+       */
+      if (!accumulator.attendanceByDay.has(day)) {
+        accumulator.attendanceByDay.set(day, code);
+      }
+    }
+
+    // -------------------------------------------------------
+    // DAILY TOTALS
+    // -------------------------------------------------------
+
+    const dailyTotals = Array.from({ length: daysInMonth }, (_, index) => ({
+      day: index + 1,
+      mandays: 0,
+    }));
+
+    let totalDays = 0;
+    let totalPaidHolidays = 0;
+
+    // -------------------------------------------------------
+    // FINAL EMPLOYEE ROWS
+    // -------------------------------------------------------
+
+    const employees = Array.from(employeeMap.values())
+      .sort((a, b) => {
+        const nameCompare = a.employeeName.localeCompare(b.employeeName);
+
+        if (nameCompare !== 0) {
+          return nameCompare;
+        }
+
+        return a.employeeId - b.employeeId;
+      })
+      .map((employee, index) => {
+        let employeeDays = 0;
+        let employeePaidHolidays = 0;
+
+        const days = Array.from({ length: daysInMonth }, (_, dayIndex) => {
+          const day = dayIndex + 1;
+
+          const code = employee.attendanceByDay.get(day) ?? '';
+
+          if (code === 'P') {
+            employeeDays += 1;
+            dailyTotals[dayIndex].mandays += 1;
+          } else if (code === 'HD') {
+            employeeDays += 0.5;
+            dailyTotals[dayIndex].mandays += 0.5;
+          }
+
+          if (code === 'PH') {
+            employeePaidHolidays += 1;
+          }
+
+          return {
+            day,
+            code,
+          };
+        });
+
+        totalDays += employeeDays;
+        totalPaidHolidays += employeePaidHolidays;
+
+        return {
+          serialNo: index + 1,
+
+          employeeId: employee.employeeId,
+
+          employeeName: employee.employeeName,
+
+          age: this.calculateAttendanceReportAge(
+            employee.dateOfBirth,
+            reportEndDate,
+          ),
+
+          gender: employee.gender,
+
+          joiningDate: employee.joiningDate,
+
+          designation: {
+            id: employee.designationId,
+            designationName: employee.designationName,
+          },
+
+          days,
+
+          totalDays: employeeDays,
+
+          paidHolidays: employeePaidHolidays,
+        };
+      });
+
+    // -------------------------------------------------------
+    // RESPONSE
+    // -------------------------------------------------------
+
+    return {
+      success: true,
+      message: 'Muster report fetched successfully.',
+
+      data: {
+        report: {
+          type: 'MUSTER',
+
+          year: query.year,
+          month: query.month,
+          daysInMonth,
+
+          site: {
+            id: department.workType.site.id,
+            siteName: department.workType.site.siteName,
+          },
+
+          workType: {
+            id: department.workType.id,
+            workTypeName: department.workType.workTypeName,
+          },
+
+          department: {
+            id: department.id,
+            departmentName: department.departmentName,
+          },
+
+          shift: query.shift ?? null,
+        },
+
+        employees,
+
+        totals: {
+          daily: dailyTotals,
+          days: totalDays,
+          paidHolidays: totalPaidHolidays,
+        },
+      },
+    };
+  }
+  // =========================================================
+  // OT MUSTER REPORT
+  //
+  // Uses the same monthly Attendance dataset as Muster.
+  //
+  // OT is NEVER calculated from working hours.
+  // It comes directly from manually entered Attendance.otHours.
+  //
+  // Output:
+  //
+  // Sr No
+  // Employee ID
+  // Employee Name
+  // Age
+  // Sex
+  // DOJ
+  // Designation
+  // Dynamic day columns containing OT hours
+  // Total OT Hours
+  // =========================================================
+
+  async getOtMusterReport(query: AttendanceReportQueryDto) {
+    // -------------------------------------------------------
+    // ORGANISATION CONTEXT VALIDATION
+    // -------------------------------------------------------
+
+    const department =
+      await this.attendanceRepository.findAttendanceReportDepartmentContext(
+        query.departmentId,
+      );
+
+    if (!department) {
+      throw new NotFoundException('Department not found.');
+    }
+
+    if (department.workTypeId !== query.workTypeId) {
+      throw new BadRequestException(
+        'Selected Department does not belong to the selected Work Type.',
+      );
+    }
+
+    if (department.workType.siteId !== query.siteId) {
+      throw new BadRequestException(
+        'Selected Work Type does not belong to the selected Site.',
+      );
+    }
+
+    // -------------------------------------------------------
+    // MONTH
+    // -------------------------------------------------------
+
+    const daysInMonth = new Date(
+      Date.UTC(query.year, query.month, 0),
+    ).getUTCDate();
+
+    const reportEndDate = new Date(
+      Date.UTC(query.year, query.month - 1, daysInMonth),
+    );
+
+    // -------------------------------------------------------
+    // RAW ATTENDANCE
+    // -------------------------------------------------------
+
+    const attendances =
+      await this.attendanceRepository.findMonthlyAttendanceReportData(query);
+
+    // -------------------------------------------------------
+    // EMPLOYEE GROUPING
+    //
+    // Multiple Attendance rows may exist for the same
+    // employee/date when no Shift filter is supplied.
+    //
+    // OT is therefore SUMMED for the date.
+    //
+    // This is different from Muster, where only one attendance
+    // status code is displayed for a date.
+    // -------------------------------------------------------
+
+    type OtMusterEmployeeAccumulator = {
+      employeeId: number;
+      employeeName: string;
+      dateOfBirth: Date | null;
+      gender: string | null;
+      joiningDate: Date;
+      designationId: number;
+      designationName: string;
+      otByDay: Map<number, number>;
+    };
+
+    const employeeMap = new Map<number, OtMusterEmployeeAccumulator>();
+
+    for (const attendance of attendances) {
+      const employee = attendance.employee;
+
+      let accumulator = employeeMap.get(employee.id);
+
+      if (!accumulator) {
+        accumulator = {
+          employeeId: employee.id,
+          employeeName: `${employee.firstName} ${employee.lastName}`.trim(),
+          dateOfBirth: employee.dateOfBirth,
+          gender: employee.gender,
+          joiningDate: employee.joiningDate,
+          designationId: employee.designation.id,
+          designationName: employee.designation.designationName,
+          otByDay: new Map<number, number>(),
+        };
+
+        employeeMap.set(employee.id, accumulator);
+      }
+
+      const day = attendance.attendanceDate.getUTCDate();
+
+      const otHours = Number(attendance.otHours);
+
+      if (!Number.isFinite(otHours) || otHours <= 0) {
+        continue;
+      }
+
+      const existingOtHours = accumulator.otByDay.get(day) ?? 0;
+
+      accumulator.otByDay.set(day, existingOtHours + otHours);
+    }
+
+    // -------------------------------------------------------
+    // DAILY TOTALS
+    // -------------------------------------------------------
+
+    const dailyTotals = Array.from({ length: daysInMonth }, (_, index) => ({
+      day: index + 1,
+      otHours: 0,
+    }));
+
+    let overallOtHours = 0;
+
+    // -------------------------------------------------------
+    // FINAL EMPLOYEE ROWS
+    //
+    // Keep only employees having OT in the selected period.
+    // -------------------------------------------------------
+
+    const employees = Array.from(employeeMap.values())
+      .filter((employee) =>
+        Array.from(employee.otByDay.values()).some((otHours) => otHours > 0),
+      )
+      .sort((a, b) => {
+        const nameCompare = a.employeeName.localeCompare(b.employeeName);
+
+        if (nameCompare !== 0) {
+          return nameCompare;
+        }
+
+        return a.employeeId - b.employeeId;
+      })
+      .map((employee, index) => {
+        let employeeTotalOtHours = 0;
+
+        const days = Array.from({ length: daysInMonth }, (_, dayIndex) => {
+          const day = dayIndex + 1;
+
+          const otHours = employee.otByDay.get(day) ?? 0;
+
+          employeeTotalOtHours += otHours;
+          dailyTotals[dayIndex].otHours += otHours;
+
+          return {
+            day,
+            otHours,
+          };
+        });
+
+        overallOtHours += employeeTotalOtHours;
+
+        return {
+          serialNo: index + 1,
+
+          employeeId: employee.employeeId,
+
+          employeeName: employee.employeeName,
+
+          age: this.calculateAttendanceReportAge(
+            employee.dateOfBirth,
+            reportEndDate,
+          ),
+
+          gender: employee.gender,
+
+          joiningDate: employee.joiningDate,
+
+          designation: {
+            id: employee.designationId,
+            designationName: employee.designationName,
+          },
+
+          days,
+
+          totalOtHours: employeeTotalOtHours,
+        };
+      });
+
+    // -------------------------------------------------------
+    // RESPONSE
+    // -------------------------------------------------------
+
+    return {
+      success: true,
+      message: 'OT Muster report fetched successfully.',
+
+      data: {
+        report: {
+          type: 'OT_MUSTER',
+
+          year: query.year,
+          month: query.month,
+          daysInMonth,
+
+          site: {
+            id: department.workType.site.id,
+            siteName: department.workType.site.siteName,
+          },
+
+          workType: {
+            id: department.workType.id,
+            workTypeName: department.workType.workTypeName,
+          },
+
+          department: {
+            id: department.id,
+            departmentName: department.departmentName,
+          },
+
+          shift: query.shift ?? null,
+        },
+
+        employees,
+
+        totals: {
+          daily: dailyTotals,
+          otHours: overallOtHours,
+        },
+      },
+    };
+  }
+  // =========================================================
+  // MUSTER WITH OT REPORT
+  //
+  // Combines:
+  // - Attendance status code
+  // - Manually entered OT hours
+  //
+  // Attendance codes:
+  // PRESENT      -> P
+  // ABSENT       -> A
+  // WEEKLY_OFF   -> WO
+  // HALF_DAY     -> HD
+  // PAID_HOLIDAY -> PH
+  //
+  // LEAVE / HOLIDAY are ignored.
+  //
+  // Mandays:
+  // P  = 1
+  // HD = 0.5
+  //
+  // OT is taken directly from Attendance.otHours.
+  // No automatic working-hour calculation.
+  // =========================================================
+
+  async getMusterWithOtReport(query: AttendanceReportQueryDto) {
+    // -------------------------------------------------------
+    // ORGANISATION CONTEXT VALIDATION
+    // -------------------------------------------------------
+
+    const department =
+      await this.attendanceRepository.findAttendanceReportDepartmentContext(
+        query.departmentId,
+      );
+
+    if (!department) {
+      throw new NotFoundException('Department not found.');
+    }
+
+    if (department.workTypeId !== query.workTypeId) {
+      throw new BadRequestException(
+        'Selected Department does not belong to the selected Work Type.',
+      );
+    }
+
+    if (department.workType.siteId !== query.siteId) {
+      throw new BadRequestException(
+        'Selected Work Type does not belong to the selected Site.',
+      );
+    }
+
+    // -------------------------------------------------------
+    // MONTH
+    // -------------------------------------------------------
+
+    const daysInMonth = new Date(
+      Date.UTC(query.year, query.month, 0),
+    ).getUTCDate();
+
+    const reportEndDate = new Date(
+      Date.UTC(query.year, query.month - 1, daysInMonth),
+    );
+
+    // -------------------------------------------------------
+    // RAW ATTENDANCE
+    // -------------------------------------------------------
+
+    const attendances =
+      await this.attendanceRepository.findMonthlyAttendanceReportData(query);
+
+    // -------------------------------------------------------
+    // EMPLOYEE GROUPING
+    // -------------------------------------------------------
+
+    type MusterWithOtEmployeeAccumulator = {
+      employeeId: number;
+      employeeName: string;
+      dateOfBirth: Date | null;
+      gender: string | null;
+      joiningDate: Date;
+      designationId: number;
+      designationName: string;
+
+      attendanceByDay: Map<number, string>;
+      otByDay: Map<number, number>;
+    };
+
+    const employeeMap = new Map<number, MusterWithOtEmployeeAccumulator>();
+
+    for (const attendance of attendances) {
+      const employee = attendance.employee;
+
+      let accumulator = employeeMap.get(employee.id);
+
+      if (!accumulator) {
+        accumulator = {
+          employeeId: employee.id,
+          employeeName: `${employee.firstName} ${employee.lastName}`.trim(),
+          dateOfBirth: employee.dateOfBirth,
+          gender: employee.gender,
+          joiningDate: employee.joiningDate,
+          designationId: employee.designation.id,
+          designationName: employee.designation.designationName,
+          attendanceByDay: new Map<number, string>(),
+          otByDay: new Map<number, number>(),
+        };
+
+        employeeMap.set(employee.id, accumulator);
+      }
+
+      const day = attendance.attendanceDate.getUTCDate();
+
+      // -----------------------------------------------------
+      // ATTENDANCE CODE
+      // -----------------------------------------------------
+
+      const code = this.mapAttendanceStatusToReportCode(attendance.status);
+
+      if (code && !accumulator.attendanceByDay.has(day)) {
+        accumulator.attendanceByDay.set(day, code);
+      }
+
+      // -----------------------------------------------------
+      // MANUAL OT
+      //
+      // If no Shift filter is supplied and multiple shift
+      // records exist for the same employee/date, OT is summed.
+      // -----------------------------------------------------
+
+      const otHours = Number(attendance.otHours);
+
+      if (Number.isFinite(otHours) && otHours > 0) {
+        const existingOtHours = accumulator.otByDay.get(day) ?? 0;
+
+        accumulator.otByDay.set(day, existingOtHours + otHours);
+      }
+    }
+
+    // -------------------------------------------------------
+    // DAILY TOTALS
+    // -------------------------------------------------------
+
+    const dailyTotals = Array.from({ length: daysInMonth }, (_, index) => ({
+      day: index + 1,
+      mandays: 0,
+      otHours: 0,
+    }));
+
+    let overallDays = 0;
+    let overallPaidHolidays = 0;
+    let overallOtHours = 0;
+
+    // -------------------------------------------------------
+    // FINAL EMPLOYEE ROWS
+    // -------------------------------------------------------
+
+    const employees = Array.from(employeeMap.values())
+      .sort((a, b) => {
+        const nameCompare = a.employeeName.localeCompare(b.employeeName);
+
+        if (nameCompare !== 0) {
+          return nameCompare;
+        }
+
+        return a.employeeId - b.employeeId;
+      })
+      .map((employee, index) => {
+        let employeeDays = 0;
+        let employeePaidHolidays = 0;
+        let employeeOtHours = 0;
+
+        const days = Array.from({ length: daysInMonth }, (_, dayIndex) => {
+          const day = dayIndex + 1;
+
+          const code = employee.attendanceByDay.get(day) ?? '';
+
+          const otHours = employee.otByDay.get(day) ?? 0;
+
+          // Mandays
+          if (code === 'P') {
+            employeeDays += 1;
+            dailyTotals[dayIndex].mandays += 1;
+          } else if (code === 'HD') {
+            employeeDays += 0.5;
+            dailyTotals[dayIndex].mandays += 0.5;
+          }
+
+          // Paid Holiday
+          if (code === 'PH') {
+            employeePaidHolidays += 1;
+          }
+
+          // Manual OT
+          employeeOtHours += otHours;
+          dailyTotals[dayIndex].otHours += otHours;
+
+          return {
+            day,
+            code,
+            otHours,
+          };
+        });
+
+        overallDays += employeeDays;
+        overallPaidHolidays += employeePaidHolidays;
+        overallOtHours += employeeOtHours;
+
+        return {
+          serialNo: index + 1,
+
+          employeeId: employee.employeeId,
+
+          employeeName: employee.employeeName,
+
+          age: this.calculateAttendanceReportAge(
+            employee.dateOfBirth,
+            reportEndDate,
+          ),
+
+          gender: employee.gender,
+
+          joiningDate: employee.joiningDate,
+
+          designation: {
+            id: employee.designationId,
+            designationName: employee.designationName,
+          },
+
+          days,
+
+          totalDays: employeeDays,
+
+          paidHolidays: employeePaidHolidays,
+
+          totalOtHours: employeeOtHours,
+        };
+      });
+
+    // -------------------------------------------------------
+    // RESPONSE
+    // -------------------------------------------------------
+
+    return {
+      success: true,
+      message: 'Muster with OT report fetched successfully.',
+
+      data: {
+        report: {
+          type: 'MUSTER_WITH_OT',
+
+          year: query.year,
+          month: query.month,
+          daysInMonth,
+
+          site: {
+            id: department.workType.site.id,
+            siteName: department.workType.site.siteName,
+          },
+
+          workType: {
+            id: department.workType.id,
+            workTypeName: department.workType.workTypeName,
+          },
+
+          department: {
+            id: department.id,
+            departmentName: department.departmentName,
+          },
+
+          shift: query.shift ?? null,
+        },
+
+        employees,
+
+        totals: {
+          daily: dailyTotals,
+          days: overallDays,
+          paidHolidays: overallPaidHolidays,
+          otHours: overallOtHours,
+        },
+      },
+    };
+  }
+  // =========================================================
+  // FORM XXIII - REGISTER OF OVERTIME
+  //
+  // Locked report rules:
+  //
+  // - Site + Month report
+  // - No Work Type
+  // - No Department
+  // - No Shift filter
+  // - Requires FINALIZED payroll
+  // - Site-specific OT hours come from Attendance
+  // - Historical wage / OT rate comes from Payroll snapshot
+  // - Payment date remains null until payment handling exists
+  //
+  // Excel printing later:
+  // - A4
+  // - Portrait
+  // - Dynamic employee count / print area
+  // =========================================================
+
+  async getFormXxiiiReport(query: FormXxiiiReportQueryDto) {
+    // -------------------------------------------------------
+    // SITE
+    // -------------------------------------------------------
+
+    const site = await this.attendanceRepository.findFormXxiiiSite(
+      query.siteId,
+    );
+
+    if (!site) {
+      throw new NotFoundException('Site not found.');
+    }
+
+    // -------------------------------------------------------
+    // SALARY MONTH
+    // -------------------------------------------------------
+
+    const salaryMonth = new Date(Date.UTC(query.year, query.month - 1, 1));
+
+    // -------------------------------------------------------
+    // SITE-SPECIFIC HISTORICAL OT
+    // -------------------------------------------------------
+
+    const attendanceRows =
+      await this.attendanceRepository.findFormXxiiiSiteOtAttendance(query);
+
+    const otHoursByEmployee = new Map<number, number>();
+
+    for (const attendance of attendanceRows) {
+      const otHours = Number(attendance.otHours);
+
+      if (!Number.isFinite(otHours) || otHours <= 0) {
+        continue;
+      }
+
+      const current = otHoursByEmployee.get(attendance.employeeId) ?? 0;
+
+      otHoursByEmployee.set(attendance.employeeId, current + otHours);
+    }
+
+    const employeeIds = Array.from(otHoursByEmployee.keys());
+
+    // -------------------------------------------------------
+    // FINALIZED PAYROLL
+    //
+    // Even when no employee has OT at this Site, payroll must
+    // still be finalized before Form XXIII is considered
+    // available for the month.
+    // -------------------------------------------------------
+
+    const payrollRun =
+      await this.attendanceRepository.findFormXxiiiFinalizedPayroll(
+        salaryMonth,
+        employeeIds,
+      );
+
+    if (!payrollRun) {
+      throw new ConflictException(
+        'Form XXIII cannot be generated because payroll for the selected month is not finalized.',
+      );
+    }
+
+    // -------------------------------------------------------
+    // EMPLOYEE ROWS
+    // -------------------------------------------------------
+
+    const employees = payrollRun.snapshots
+      .map((snapshot) => {
+        const otHours = otHoursByEmployee.get(snapshot.employeeId) ?? 0;
+
+        if (otHours <= 0) {
+          return null;
+        }
+
+        const monthlyBasic = Number(snapshot.monthlyBasic);
+        const monthlyDa = Number(snapshot.monthlyDa);
+        const otRate = Number(snapshot.otRate);
+
+        const normalRatePerDay = (monthlyBasic + monthlyDa) / 26;
+
+        const overtimeEarnings = otRate * otHours;
+
+        return {
+          employeeId: snapshot.employeeId,
+          employeeName: snapshot.employeeName,
+
+          gender: snapshot.gender,
+
+          designation: {
+            id: snapshot.designationId,
+            designationName: snapshot.designationName,
+          },
+
+          overtimeWorkedDate: 'AS PER MUSTER ATTACHED',
+
+          totalOtHours: otHours,
+
+          normalRatePerDay,
+
+          otRatePerHour: otRate,
+
+          overtimeEarnings,
+
+          // Payment handling has not yet been implemented.
+          // Do not substitute Payroll finalizedAt.
+          paymentDate: null,
+
+          remarks: snapshot.bankName,
+        };
+      })
+      .filter(
+        (employee): employee is NonNullable<typeof employee> =>
+          employee !== null,
+      )
+      .sort((a, b) => {
+        const nameCompare = a.employeeName.localeCompare(b.employeeName);
+
+        if (nameCompare !== 0) {
+          return nameCompare;
+        }
+
+        return a.employeeId - b.employeeId;
+      })
+      .map((employee, index) => ({
+        serialNo: index + 1,
+        ...employee,
+      }));
+
+    // -------------------------------------------------------
+    // TOTALS
+    // -------------------------------------------------------
+
+    const totalOtHours = employees.reduce(
+      (total, employee) => total + employee.totalOtHours,
+      0,
+    );
+
+    const totalOvertimeEarnings = employees.reduce(
+      (total, employee) => total + employee.overtimeEarnings,
+      0,
+    );
+
+    // -------------------------------------------------------
+    // RESPONSE
+    // -------------------------------------------------------
+
+    return {
+      success: true,
+
+      message: 'Form XXIII Register of Overtime fetched successfully.',
+
+      data: {
+        report: {
+          type: 'FORM_XXIII_OVERTIME_REGISTER',
+
+          year: query.year,
+          month: query.month,
+
+          site: {
+            id: site.id,
+            siteName: site.siteName,
+          },
+
+          payrollRun: {
+            id: payrollRun.id,
+            version: payrollRun.version,
+            salaryMonth: payrollRun.salaryMonth,
+            finalizedAt: payrollRun.finalizedAt,
+          },
+
+          print: {
+            paperSize: 'A4',
+            orientation: 'PORTRAIT',
+            dynamicPrintArea: true,
+          },
+        },
+
+        employees,
+
+        totals: {
+          employeeCount: employees.length,
+          otHours: totalOtHours,
+          overtimeEarnings: totalOvertimeEarnings,
+        },
+      },
+    };
+  }
+  // =========================================================
+  // MUSTER CUT FILE
+  //
+  // Approved aggregation:
+  //
+  // Department
+  //   -> Designation
+  //      -> FIRST
+  //      -> SECOND
+  //      -> THIRD
+  //      -> TOTAL
+  //
+  // Manday calculation:
+  //
+  // PRESENT  = 1.0
+  // HALF_DAY = 0.5
+  //
+  // All other Attendance statuses contribute 0 mandays.
+  //
+  // Dynamic dates:
+  // 28 / 29 / 30 / 31 according to selected month.
+  // =========================================================
+
+  async getMusterCutFileReport(query: MusterCutFileQueryDto) {
+    // -------------------------------------------------------
+    // WORK TYPE / SITE VALIDATION
+    // -------------------------------------------------------
+
+    const workType =
+      await this.attendanceRepository.findMusterCutFileWorkTypeContext(
+        query.workTypeId,
+      );
+
+    if (!workType) {
+      throw new NotFoundException('Work Type not found.');
+    }
+
+    if (workType.siteId !== query.siteId) {
+      throw new BadRequestException(
+        'Selected Work Type does not belong to the selected Site.',
+      );
+    }
+
+    // -------------------------------------------------------
+    // OPTIONAL DEPARTMENT VALIDATION
+    // -------------------------------------------------------
+
+    if (query.departmentId) {
+      const department =
+        await this.attendanceRepository.findMusterCutFileDepartmentContext(
+          query.departmentId,
+        );
+
+      if (!department) {
+        throw new NotFoundException('Department not found.');
+      }
+
+      if (department.workTypeId !== query.workTypeId) {
+        throw new BadRequestException(
+          'Selected Department does not belong to the selected Work Type.',
+        );
+      }
+    }
+
+    // -------------------------------------------------------
+    // MONTH
+    // -------------------------------------------------------
+
+    const daysInMonth = new Date(
+      Date.UTC(query.year, query.month, 0),
+    ).getUTCDate();
+
+    // -------------------------------------------------------
+    // RAW ATTENDANCE
+    // -------------------------------------------------------
+
+    const attendances =
+      await this.attendanceRepository.findMusterCutFileData(query);
+
+    // -------------------------------------------------------
+    // INTERNAL TYPES
+    // -------------------------------------------------------
+
+    type ShiftKey = 'FIRST' | 'SECOND' | 'THIRD';
+
+    type ShiftAccumulator = {
+      daily: number[];
+    };
+
+    type GroupAccumulator = {
+      departmentId: number;
+      departmentName: string;
+
+      designationId: number;
+      designationName: string;
+
+      shifts: Record<ShiftKey, ShiftAccumulator>;
+    };
+
+    const createShiftAccumulator = (): ShiftAccumulator => ({
+      daily: Array.from({ length: daysInMonth }, () => 0),
+    });
+
+    const groupMap = new Map<string, GroupAccumulator>();
+
+    // -------------------------------------------------------
+    // AGGREGATION
+    // -------------------------------------------------------
+
+    for (const attendance of attendances) {
+      /*
+       * Historical Attendance rows without Department cannot
+       * be placed into an operational Cut File.
+       */
+      if (!attendance.department) {
+        continue;
+      }
+
+      let mandays = 0;
+
+      if (attendance.status === 'PRESENT') {
+        mandays = 1;
+      } else if (attendance.status === 'HALF_DAY') {
+        mandays = 0.5;
+      } else {
+        continue;
+      }
+
+      const designation = attendance.employee.designation;
+
+      const key = `${attendance.department.id}:${designation.id}`;
+
+      let group = groupMap.get(key);
+
+      if (!group) {
+        group = {
+          departmentId: attendance.department.id,
+          departmentName: attendance.department.departmentName,
+
+          designationId: designation.id,
+          designationName: designation.designationName,
+
+          shifts: {
+            FIRST: createShiftAccumulator(),
+            SECOND: createShiftAccumulator(),
+            THIRD: createShiftAccumulator(),
+          },
+        };
+
+        groupMap.set(key, group);
+      }
+
+      const dayIndex = attendance.attendanceDate.getUTCDate() - 1;
+
+      group.shifts[attendance.shift].daily[dayIndex] += mandays;
+    }
+
+    // -------------------------------------------------------
+    // GRAND DAILY TOTALS
+    // -------------------------------------------------------
+
+    const grandDailyTotals = Array.from(
+      { length: daysInMonth },
+      (_, index) => ({
+        day: index + 1,
+        mandays: 0,
+      }),
+    );
+
+    let grandTotalMandays = 0;
+
+    // -------------------------------------------------------
+    // FINAL GROUPS
+    // -------------------------------------------------------
+
+    const groups = Array.from(groupMap.values())
+      .sort((a, b) => {
+        const departmentCompare = a.departmentName.localeCompare(
+          b.departmentName,
+        );
+
+        if (departmentCompare !== 0) {
+          return departmentCompare;
+        }
+
+        const designationCompare = a.designationName.localeCompare(
+          b.designationName,
+        );
+
+        if (designationCompare !== 0) {
+          return designationCompare;
+        }
+
+        return a.designationId - b.designationId;
+      })
+      .map((group) => {
+        const shiftOrder: Array<{
+          key: ShiftKey;
+          label: string;
+        }> = [
+          {
+            key: 'FIRST',
+            label: '1st',
+          },
+          {
+            key: 'SECOND',
+            label: '2nd',
+          },
+          {
+            key: 'THIRD',
+            label: '3rd',
+          },
+        ];
+
+        const shifts = shiftOrder.map(({ key, label }) => {
+          const days = group.shifts[key].daily.map((mandays, index) => ({
+            day: index + 1,
+            mandays,
+          }));
+
+          const total = group.shifts[key].daily.reduce(
+            (sum, mandays) => sum + mandays,
+            0,
+          );
+
+          return {
+            shift: key,
+            shiftLabel: label,
+            days,
+            total,
+          };
+        });
+
+        const totalDays = Array.from({ length: daysInMonth }, (_, dayIndex) => {
+          const mandays =
+            group.shifts.FIRST.daily[dayIndex] +
+            group.shifts.SECOND.daily[dayIndex] +
+            group.shifts.THIRD.daily[dayIndex];
+
+          grandDailyTotals[dayIndex].mandays += mandays;
+
+          return {
+            day: dayIndex + 1,
+            mandays,
+          };
+        });
+
+        const total = totalDays.reduce((sum, day) => sum + day.mandays, 0);
+
+        grandTotalMandays += total;
+
+        return {
+          department: {
+            id: group.departmentId,
+            departmentName: group.departmentName,
+          },
+
+          designation: {
+            id: group.designationId,
+            designationName: group.designationName,
+          },
+
+          shifts,
+
+          totalRow: {
+            label: 'TOTAL',
+            days: totalDays,
+            total,
+          },
+        };
+      });
+
+    // -------------------------------------------------------
+    // RESPONSE
+    // -------------------------------------------------------
+
+    return {
+      success: true,
+
+      message: 'Muster Cut File report fetched successfully.',
+
+      data: {
+        report: {
+          type: 'MUSTER_CUT_FILE',
+
+          title: 'REGULAR MUSTER CUTFILE',
+
+          year: query.year,
+          month: query.month,
+          daysInMonth,
+
+          site: {
+            id: workType.site.id,
+            siteName: workType.site.siteName,
+          },
+
+          workType: {
+            id: workType.id,
+            workTypeName: workType.workTypeName,
+          },
+
+          filters: {
+            departmentId: query.departmentId ?? null,
+
+            designationId: query.designationId ?? null,
+          },
+
+          print: {
+            paperSize: 'A4',
+            orientation: 'LANDSCAPE',
+            dynamicPrintArea: true,
+          },
+        },
+
+        groups,
+
+        totals: {
+          daily: grandDailyTotals,
+          mandays: grandTotalMandays,
+        },
+      },
+    };
+  }
+  // =========================================================
+  // OT MUSTER CUT FILE
+  //
+  // Approved Excel structure:
+  //
+  // Department
+  //   -> Designation
+  //      -> OT HOURS slab
+  //
+  // Daily cells contain EMPLOYEE COUNT for the exact
+  // OT-hours slab.
+  //
+  // Example:
+  //
+  // HOURS = 2
+  // Day 16 count = 3
+  //
+  // Means:
+  // 3 employees worked exactly 2 OT hours on Day 16.
+  //
+  // Row OT total:
+  //
+  // Sum(employee counts across month) * HOURS
+  //
+  // OT is taken ONLY from manually entered Attendance.otHours.
+  // =========================================================
+
+  async getOtMusterCutFileReport(query: MusterCutFileQueryDto) {
+    // -------------------------------------------------------
+    // WORK TYPE / SITE VALIDATION
+    // -------------------------------------------------------
+
+    const workType =
+      await this.attendanceRepository.findMusterCutFileWorkTypeContext(
+        query.workTypeId,
+      );
+
+    if (!workType) {
+      throw new NotFoundException('Work Type not found.');
+    }
+
+    if (workType.siteId !== query.siteId) {
+      throw new BadRequestException(
+        'Selected Work Type does not belong to the selected Site.',
+      );
+    }
+
+    // -------------------------------------------------------
+    // OPTIONAL DEPARTMENT VALIDATION
+    // -------------------------------------------------------
+
+    if (query.departmentId) {
+      const department =
+        await this.attendanceRepository.findMusterCutFileDepartmentContext(
+          query.departmentId,
+        );
+
+      if (!department) {
+        throw new NotFoundException('Department not found.');
+      }
+
+      if (department.workTypeId !== query.workTypeId) {
+        throw new BadRequestException(
+          'Selected Department does not belong to the selected Work Type.',
+        );
+      }
+    }
+
+    // -------------------------------------------------------
+    // MONTH
+    // -------------------------------------------------------
+
+    const daysInMonth = new Date(
+      Date.UTC(query.year, query.month, 0),
+    ).getUTCDate();
+
+    // -------------------------------------------------------
+    // RAW ATTENDANCE
+    // -------------------------------------------------------
+
+    const attendances =
+      await this.attendanceRepository.findMusterCutFileData(query);
+
+    // -------------------------------------------------------
+    // STEP 1
+    //
+    // SUM OT PER:
+    //
+    // Department + Designation + Employee + Date
+    //
+    // This prevents the same employee from being counted twice
+    // merely because OT was entered under more than one Shift
+    // on the same date.
+    // -------------------------------------------------------
+
+    type EmployeeDailyOtAccumulator = {
+      departmentId: number;
+      departmentName: string;
+
+      designationId: number;
+      designationName: string;
+
+      employeeId: number;
+
+      day: number;
+
+      otHours: number;
+    };
+
+    const employeeDailyMap = new Map<string, EmployeeDailyOtAccumulator>();
+
+    for (const attendance of attendances) {
+      if (!attendance.department) {
+        continue;
+      }
+
+      const otHours = Number(attendance.otHours);
+
+      if (!Number.isFinite(otHours) || otHours <= 0) {
+        continue;
+      }
+
+      const designation = attendance.employee.designation;
+
+      const day = attendance.attendanceDate.getUTCDate();
+
+      const key = [
+        attendance.department.id,
+        designation.id,
+        attendance.employeeId,
+        day,
+      ].join(':');
+
+      const existing = employeeDailyMap.get(key);
+
+      if (existing) {
+        existing.otHours += otHours;
+      } else {
+        employeeDailyMap.set(key, {
+          departmentId: attendance.department.id,
+          departmentName: attendance.department.departmentName,
+
+          designationId: designation.id,
+          designationName: designation.designationName,
+
+          employeeId: attendance.employeeId,
+
+          day,
+
+          otHours,
+        });
+      }
+    }
+
+    // -------------------------------------------------------
+    // STEP 2
+    //
+    // GROUP EMPLOYEE/DAY VALUES INTO EXACT OT-HOUR SLABS
+    // -------------------------------------------------------
+
+    type OtSlabAccumulator = {
+      hours: number;
+      dailyEmployeeCounts: number[];
+    };
+
+    type OtCutFileGroupAccumulator = {
+      departmentId: number;
+      departmentName: string;
+
+      designationId: number;
+      designationName: string;
+
+      slabs: Map<number, OtSlabAccumulator>;
+    };
+
+    const groupMap = new Map<string, OtCutFileGroupAccumulator>();
+
+    const allHourSlabs = new Set<number>();
+
+    for (const employeeDaily of employeeDailyMap.values()) {
+      /*
+       * Normalize Decimal -> number for stable grouping.
+       *
+       * Attendance currently accepts OT in 0.5-hour steps,
+       * but we do not hard-code only those values here.
+       */
+      const hours = Number(employeeDaily.otHours.toFixed(2));
+
+      if (hours <= 0) {
+        continue;
+      }
+
+      allHourSlabs.add(hours);
+
+      const groupKey = `${employeeDaily.departmentId}:${employeeDaily.designationId}`;
+
+      let group = groupMap.get(groupKey);
+
+      if (!group) {
+        group = {
+          departmentId: employeeDaily.departmentId,
+          departmentName: employeeDaily.departmentName,
+
+          designationId: employeeDaily.designationId,
+          designationName: employeeDaily.designationName,
+
+          slabs: new Map<number, OtSlabAccumulator>(),
+        };
+
+        groupMap.set(groupKey, group);
+      }
+
+      let slab = group.slabs.get(hours);
+
+      if (!slab) {
+        slab = {
+          hours,
+          dailyEmployeeCounts: Array.from({ length: daysInMonth }, () => 0),
+        };
+
+        group.slabs.set(hours, slab);
+      }
+
+      slab.dailyEmployeeCounts[employeeDaily.day - 1] += 1;
+    }
+
+    // -------------------------------------------------------
+    // GRAND TOTALS
+    //
+    // employeeCount = employee/day occurrences
+    // otHours       = actual total manual OT hours
+    // -------------------------------------------------------
+
+    const grandDailyTotals = Array.from(
+      { length: daysInMonth },
+      (_, index) => ({
+        day: index + 1,
+        employeeCount: 0,
+        otHours: 0,
+      }),
+    );
+
+    let grandEmployeeCount = 0;
+    let grandOtHours = 0;
+
+    // -------------------------------------------------------
+    // FINAL GROUPS
+    // -------------------------------------------------------
+
+    const groups = Array.from(groupMap.values())
+      .sort((a, b) => {
+        const departmentCompare = a.departmentName.localeCompare(
+          b.departmentName,
+        );
+
+        if (departmentCompare !== 0) {
+          return departmentCompare;
+        }
+
+        const designationCompare = a.designationName.localeCompare(
+          b.designationName,
+        );
+
+        if (designationCompare !== 0) {
+          return designationCompare;
+        }
+
+        return a.designationId - b.designationId;
+      })
+      .map((group) => {
+        const groupDailyTotals = Array.from(
+          { length: daysInMonth },
+          (_, index) => ({
+            day: index + 1,
+            employeeCount: 0,
+            otHours: 0,
+          }),
+        );
+
+        let groupEmployeeCount = 0;
+        let groupOtHours = 0;
+
+        const hourRows = Array.from(group.slabs.values())
+          .sort((a, b) => a.hours - b.hours)
+          .map((slab) => {
+            let totalEmployeeCount = 0;
+
+            const days = slab.dailyEmployeeCounts.map(
+              (employeeCount, dayIndex) => {
+                const otHours = employeeCount * slab.hours;
+
+                totalEmployeeCount += employeeCount;
+
+                groupDailyTotals[dayIndex].employeeCount += employeeCount;
+
+                groupDailyTotals[dayIndex].otHours += otHours;
+
+                return {
+                  day: dayIndex + 1,
+                  employeeCount,
+                };
+              },
+            );
+
+            const totalOtHours = totalEmployeeCount * slab.hours;
+
+            groupEmployeeCount += totalEmployeeCount;
+            groupOtHours += totalOtHours;
+
+            return {
+              hours: slab.hours,
+
+              days,
+
+              totalEmployeeCount,
+
+              totalOtHours,
+            };
+          });
+
+        for (let dayIndex = 0; dayIndex < daysInMonth; dayIndex += 1) {
+          grandDailyTotals[dayIndex].employeeCount +=
+            groupDailyTotals[dayIndex].employeeCount;
+
+          grandDailyTotals[dayIndex].otHours +=
+            groupDailyTotals[dayIndex].otHours;
+        }
+
+        grandEmployeeCount += groupEmployeeCount;
+        grandOtHours += groupOtHours;
+
+        return {
+          department: {
+            id: group.departmentId,
+            departmentName: group.departmentName,
+          },
+
+          designation: {
+            id: group.designationId,
+            designationName: group.designationName,
+          },
+
+          hourRows,
+
+          totalRow: {
+            label: 'TOTAL',
+
+            days: groupDailyTotals,
+
+            employeeCount: groupEmployeeCount,
+
+            otHours: groupOtHours,
+          },
+        };
+      });
+
+    // -------------------------------------------------------
+    // RESPONSE
+    // -------------------------------------------------------
+
+    return {
+      success: true,
+
+      message: 'OT Muster Cut File report fetched successfully.',
+
+      data: {
+        report: {
+          type: 'OT_MUSTER_CUT_FILE',
+
+          title: 'OT MUSTER CUTFILE',
+
+          year: query.year,
+          month: query.month,
+          daysInMonth,
+
+          site: {
+            id: workType.site.id,
+            siteName: workType.site.siteName,
+          },
+
+          workType: {
+            id: workType.id,
+            workTypeName: workType.workTypeName,
+          },
+
+          filters: {
+            departmentId: query.departmentId ?? null,
+
+            designationId: query.designationId ?? null,
+          },
+
+          hourSlabs: Array.from(allHourSlabs).sort((a, b) => a - b),
+
+          print: {
+            paperSize: 'A4',
+            orientation: 'LANDSCAPE',
+            dynamicPrintArea: true,
+          },
+        },
+
+        groups,
+
+        totals: {
+          daily: grandDailyTotals,
+
+          employeeCount: grandEmployeeCount,
+
+          otHours: grandOtHours,
+        },
+      },
     };
   }
 

@@ -18,6 +18,9 @@ import { AttendanceDashboardQueryDto } from '../dto/attendance-dashboard-query.d
 import { BulkAttendanceDto } from '../dto/bulk-attendance.dto';
 import { BulkOtUpdateDto } from '../dto/bulk-ot-update.dto';
 import { MonthlyAttendanceQueryDto } from '../dto/monthly-attendance-query.dto';
+import { AttendanceReportQueryDto } from '../dto/attendance-report-query.dto';
+import { FormXxiiiReportQueryDto } from '../dto/form-xxiii-report-query.dto';
+import { MusterCutFileQueryDto } from '../dto/muster-cut-file-query.dto';
 
 @Controller('attendance')
 export class AttendanceController {
@@ -55,6 +58,55 @@ export class AttendanceController {
   @Get('pending')
   findPendingEmployees(@Query() query: PendingAttendanceQueryDto) {
     return this.attendanceService.findPendingEmployees(query);
+  }
+  // =========================================================
+  // ATTENDANCE REPORTS - MUSTER
+  // =========================================================
+
+  @Get('reports/muster')
+  getMusterReport(@Query() query: AttendanceReportQueryDto) {
+    return this.attendanceService.getMusterReport(query);
+  }
+  // =========================================================
+  // ATTENDANCE REPORTS - OT MUSTER
+  // =========================================================
+
+  @Get('reports/ot-muster')
+  getOtMusterReport(@Query() query: AttendanceReportQueryDto) {
+    return this.attendanceService.getOtMusterReport(query);
+  }
+  // =========================================================
+  // ATTENDANCE REPORTS - MUSTER WITH OT
+  // =========================================================
+
+  @Get('reports/muster-with-ot')
+  getMusterWithOtReport(@Query() query: AttendanceReportQueryDto) {
+    return this.attendanceService.getMusterWithOtReport(query);
+  }
+  // =========================================================
+  // ATTENDANCE REPORTS - FORM XXIII
+  // REGISTER OF OVERTIME
+  // =========================================================
+
+  @Get('reports/form-xxiii')
+  getFormXxiiiReport(@Query() query: FormXxiiiReportQueryDto) {
+    return this.attendanceService.getFormXxiiiReport(query);
+  }
+  // =========================================================
+  // ATTENDANCE REPORTS - MUSTER CUT FILE
+  // =========================================================
+
+  @Get('reports/muster-cut-file')
+  getMusterCutFileReport(@Query() query: MusterCutFileQueryDto) {
+    return this.attendanceService.getMusterCutFileReport(query);
+  }
+  // =========================================================
+  // ATTENDANCE REPORTS - OT MUSTER CUT FILE
+  // =========================================================
+
+  @Get('reports/ot-muster-cut-file')
+  getOtMusterCutFileReport(@Query() query: MusterCutFileQueryDto) {
+    return this.attendanceService.getOtMusterCutFileReport(query);
   }
 
   @Get(':id')

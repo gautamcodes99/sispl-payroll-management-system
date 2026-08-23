@@ -7,6 +7,9 @@ import { BulkAttendanceDto } from '../dto/bulk-attendance.dto';
 import { BulkOtUpdateDto } from '../dto/bulk-ot-update.dto';
 import { MonthlyAttendanceQueryDto } from '../dto/monthly-attendance-query.dto';
 import { AttendanceShift, Prisma } from '@prisma/client';
+import { AttendanceReportQueryDto } from '../dto/attendance-report-query.dto';
+import { FormXxiiiReportQueryDto } from '../dto/form-xxiii-report-query.dto';
+import { MusterCutFileQueryDto } from '../dto/muster-cut-file-query.dto';
 
 @Injectable()
 export class AttendanceRepository {
@@ -836,6 +839,437 @@ export class AttendanceRepository {
 
       otHours,
     };
+  }
+  // =========================================================
+  // ATTENDANCE REPORT ORGANISATION CONTEXT
+  //
+  // Used by report Service validation and dynamic headers.
+  //
+  // Department
+  //   -> Work Type
+  //      -> Site
+  // =========================================================
+
+  async findAttendanceReportDepartmentContext(departmentId: number) {
+    return this.prisma.department.findUnique({
+      where: {
+        id: departmentId,
+      },
+
+      select: {
+        id: true,
+        departmentName: true,
+        workTypeId: true,
+
+        workType: {
+          select: {
+            id: true,
+            workTypeName: true,
+            siteId: true,
+
+            site: {
+              select: {
+                id: true,
+                siteName: true,
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  // =========================================================
+  // MONTHLY ATTENDANCE REPORT DATA
+  //
+  // No pagination.
+  //
+  // This is the common raw dataset that will later be reused
+  // by Muster, OT Muster and Muster With OT.
+  //
+  // Attendance organisation context:
+  //
+  // Attendance -> Department -> Work Type -> Site
+  //
+  // Employee:
+  //
+  // Employee -> Designation
+  // =========================================================
+
+  async findMonthlyAttendanceReportData(query: AttendanceReportQueryDto) {
+    const startDate = new Date(Date.UTC(query.year, query.month - 1, 1));
+
+    const endDate = new Date(Date.UTC(query.year, query.month, 1));
+
+    const where: Prisma.AttendanceWhereInput = {
+      attendanceDate: {
+        gte: startDate,
+        lt: endDate,
+      },
+
+      departmentId: query.departmentId,
+
+      department: {
+        workTypeId: query.workTypeId,
+
+        workType: {
+          siteId: query.siteId,
+        },
+      },
+    };
+
+    if (query.shift) {
+      where.shift = query.shift;
+    }
+
+    return this.prisma.attendance.findMany({
+      where,
+
+      orderBy: [
+        {
+          employee: {
+            firstName: 'asc',
+          },
+        },
+        {
+          employee: {
+            lastName: 'asc',
+          },
+        },
+        {
+          attendanceDate: 'asc',
+        },
+        {
+          shift: 'asc',
+        },
+      ],
+
+      select: {
+        id: true,
+        attendanceDate: true,
+        status: true,
+        shift: true,
+        otHours: true,
+
+        employee: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            gender: true,
+            dateOfBirth: true,
+            joiningDate: true,
+
+            designation: {
+              select: {
+                id: true,
+                designationName: true,
+              },
+            },
+          },
+        },
+
+        department: {
+          select: {
+            id: true,
+            departmentName: true,
+
+            workType: {
+              select: {
+                id: true,
+                workTypeName: true,
+
+                site: {
+                  select: {
+                    id: true,
+                    siteName: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+  // =========================================================
+  // FORM XXIII - SITE CONTEXT
+  // =========================================================
+
+  async findFormXxiiiSite(siteId: number) {
+    return this.prisma.site.findUnique({
+      where: {
+        id: siteId,
+      },
+
+      select: {
+        id: true,
+        siteName: true,
+      },
+    });
+  }
+
+  // =========================================================
+  // FORM XXIII - SITE OT ATTENDANCE
+  //
+  // Attendance determines which OT belongs to the selected
+  // operational Site.
+  //
+  // Monetary rates are NOT taken from Attendance.
+  // They come from the finalized Payroll snapshot.
+  // =========================================================
+
+  async findFormXxiiiSiteOtAttendance(query: FormXxiiiReportQueryDto) {
+    const startDate = new Date(Date.UTC(query.year, query.month - 1, 1));
+
+    const endDate = new Date(Date.UTC(query.year, query.month, 1));
+
+    return this.prisma.attendance.findMany({
+      where: {
+        attendanceDate: {
+          gte: startDate,
+          lt: endDate,
+        },
+
+        otHours: {
+          gt: 0,
+        },
+
+        department: {
+          workType: {
+            siteId: query.siteId,
+          },
+        },
+      },
+
+      orderBy: [
+        {
+          employeeId: 'asc',
+        },
+        {
+          attendanceDate: 'asc',
+        },
+      ],
+
+      select: {
+        employeeId: true,
+        attendanceDate: true,
+        otHours: true,
+      },
+    });
+  }
+
+  // =========================================================
+  // FORM XXIII - FINALIZED PAYROLL SNAPSHOTS
+  //
+  // Historical wage / OT monetary values must come from the
+  // FINALIZED payroll snapshot for the selected salary month.
+  // =========================================================
+
+  async findFormXxiiiFinalizedPayroll(
+    salaryMonth: Date,
+    employeeIds: number[],
+  ) {
+    return this.prisma.payrollRun.findFirst({
+      where: {
+        salaryMonth,
+        status: 'FINALIZED',
+      },
+
+      orderBy: {
+        version: 'desc',
+      },
+
+      select: {
+        id: true,
+        salaryMonth: true,
+        version: true,
+        finalizedAt: true,
+
+        snapshots: {
+          where:
+            employeeIds.length > 0
+              ? {
+                  employeeId: {
+                    in: employeeIds,
+                  },
+                }
+              : {
+                  employeeId: {
+                    in: [],
+                  },
+                },
+
+          orderBy: {
+            employeeId: 'asc',
+          },
+
+          select: {
+            employeeId: true,
+            employeeName: true,
+            gender: true,
+            designationId: true,
+            designationName: true,
+
+            bankName: true,
+
+            monthlyBasic: true,
+            monthlyDa: true,
+
+            otRate: true,
+          },
+        },
+      },
+    });
+  }
+  // =========================================================
+  // MUSTER CUT FILE - WORK TYPE CONTEXT
+  //
+  // Used to validate:
+  //
+  // Site
+  //   -> Work Type
+  //
+  // Department remains optional because the approved Cut File
+  // may contain multiple Departments in the report body.
+  // =========================================================
+
+  async findMusterCutFileWorkTypeContext(workTypeId: number) {
+    return this.prisma.workType.findUnique({
+      where: {
+        id: workTypeId,
+      },
+
+      select: {
+        id: true,
+        workTypeName: true,
+        siteId: true,
+
+        site: {
+          select: {
+            id: true,
+            siteName: true,
+          },
+        },
+      },
+    });
+  }
+
+  // =========================================================
+  // MUSTER CUT FILE - DEPARTMENT CONTEXT
+  // =========================================================
+
+  async findMusterCutFileDepartmentContext(departmentId: number) {
+    return this.prisma.department.findUnique({
+      where: {
+        id: departmentId,
+      },
+
+      select: {
+        id: true,
+        departmentName: true,
+        workTypeId: true,
+      },
+    });
+  }
+
+  // =========================================================
+  // MUSTER CUT FILE - MONTHLY RAW DATA
+  //
+  // Returns only the fields required to aggregate:
+  //
+  // Department
+  // Designation
+  // Shift
+  // Attendance Date
+  // Attendance Status
+  //
+  // No pagination.
+  // =========================================================
+
+  async findMusterCutFileData(query: MusterCutFileQueryDto) {
+    const startDate = new Date(Date.UTC(query.year, query.month - 1, 1));
+
+    const endDate = new Date(Date.UTC(query.year, query.month, 1));
+
+    const where: Prisma.AttendanceWhereInput = {
+      attendanceDate: {
+        gte: startDate,
+        lt: endDate,
+      },
+
+      department: {
+        workTypeId: query.workTypeId,
+
+        workType: {
+          siteId: query.siteId,
+        },
+      },
+    };
+
+    if (query.departmentId) {
+      where.departmentId = query.departmentId;
+    }
+
+    if (query.designationId) {
+      where.employee = {
+        designationId: query.designationId,
+      };
+    }
+
+    return this.prisma.attendance.findMany({
+      where,
+
+      orderBy: [
+        {
+          department: {
+            departmentName: 'asc',
+          },
+        },
+        {
+          employee: {
+            designation: {
+              designationName: 'asc',
+            },
+          },
+        },
+        {
+          attendanceDate: 'asc',
+        },
+        {
+          shift: 'asc',
+        },
+        {
+          employeeId: 'asc',
+        },
+      ],
+
+      select: {
+        employeeId: true,
+        attendanceDate: true,
+        status: true,
+        shift: true,
+        otHours: true,
+
+        department: {
+          select: {
+            id: true,
+            departmentName: true,
+          },
+        },
+
+        employee: {
+          select: {
+            designation: {
+              select: {
+                id: true,
+                designationName: true,
+              },
+            },
+          },
+        },
+      },
+    });
   }
 
   // =========================================================
