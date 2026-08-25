@@ -64,6 +64,7 @@ export class PayrollService {
       siteName: null,
 
       bankName: payroll.employee.bankName,
+      bankBranch: payroll.employee.bankBranch,
       accountHolderName: payroll.employee.accountHolderName,
       accountNumber: payroll.employee.accountNumber,
       ifscCode: payroll.employee.ifscCode,

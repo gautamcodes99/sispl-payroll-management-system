@@ -77,6 +77,10 @@ export class ImportEmployeeRowDto {
 
   @IsOptional()
   @IsString()
+  bankBranch?: string;
+
+  @IsOptional()
+  @IsString()
   accountHolderName?: string;
 
   @IsOptional()

@@ -76,6 +76,7 @@ export class EmployeeRepository {
 
     // Bank Details
     bankName: true,
+    bankBranch: true,
     accountHolderName: true,
     accountNumber: true,
     ifscCode: true,
@@ -342,6 +343,7 @@ export class EmployeeRepository {
 
       data: {
         bankName: updateEmployeeBankDto.bankName,
+        bankBranch: updateEmployeeBankDto.bankBranch,
         accountHolderName: updateEmployeeBankDto.accountHolderName,
         accountNumber: updateEmployeeBankDto.accountNumber,
         ifscCode: updateEmployeeBankDto.ifscCode,
@@ -484,6 +486,7 @@ export class EmployeeRepository {
 
         // Bank Details
         bankName: true,
+        bankBranch: true,
         accountHolderName: true,
         accountNumber: true,
         ifscCode: true,
@@ -616,6 +619,7 @@ export class EmployeeRepository {
               permanentAddress: row.permanentAddress?.trim() || null,
 
               bankName: row.bankName?.trim() || null,
+              bankBranch: row.bankBranch?.trim() || null,
               accountHolderName: row.accountHolderName?.trim() || null,
               accountNumber: row.accountNumber?.trim() || null,
               ifscCode: row.ifscCode?.trim() || null,

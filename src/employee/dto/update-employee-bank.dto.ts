@@ -7,6 +7,10 @@ export class UpdateEmployeeBankDto {
 
   @IsOptional()
   @IsString()
+  bankBranch?: string;
+
+  @IsOptional()
+  @IsString()
   accountHolderName?: string;
 
   @IsOptional()

@@ -352,6 +352,7 @@ export class PayrollCalculationService {
         gender: employee.gender,
 
         bankName: employee.bankName,
+        bankBranch: employee.bankBranch,
         accountHolderName: employee.accountHolderName,
         accountNumber: employee.accountNumber,
         ifscCode: employee.ifscCode,
