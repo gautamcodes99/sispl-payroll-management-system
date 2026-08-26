@@ -1294,6 +1294,124 @@ export class PayrollReportsService {
     };
   }
   // =========================================================
+  // HRA REGISTER - FORM A
+  //
+  // Register of House Rent Allowance.
+  //
+  // Company-wide Payroll Report.
+  //
+  // Source of truth:
+  // PayrollEmployeeSnapshot
+  //
+  // Wages:
+  // snapshot.wages
+  //
+  // House Rent:
+  // snapshot.hra
+  //
+  // Monetary values are NOT recalculated from current Wage
+  // Master, Attendance or Employee Master.
+  //
+  // Mode of Payment comes from the optional Payroll Payment
+  // record. No payment row means UNPAID and therefore no mode
+  // of payment is shown.
+  //
+  // Signature and Remarks are report-display fields only and
+  // remain blank for now.
+  // =========================================================
+
+  async getHraRegister(salaryMonthInput: Date) {
+    if (Number.isNaN(salaryMonthInput.getTime())) {
+      throw new BadRequestException('Salary month is invalid.');
+    }
+
+    const salaryMonth = this.normalizeSalaryMonth(salaryMonthInput);
+
+    const payrollRun =
+      await this.payrollReportsRepository.findCurrentPayrollRunWithSnapshotsAndPayments(
+        salaryMonth,
+      );
+
+    if (!payrollRun) {
+      throw new NotFoundException(
+        `No current finalized Payroll Run found for ${salaryMonth.toISOString()}.`,
+      );
+    }
+
+    const employees = payrollRun.snapshots.map((snapshot, index) => {
+      const paymentStatus = snapshot.payment?.status ?? 'UNPAID';
+
+      return {
+        serialNumber: index + 1,
+
+        snapshotId: snapshot.id,
+
+        employeeId: snapshot.employeeId,
+        employeeName: snapshot.employeeName,
+
+        wages: this.money(snapshot.wages),
+
+        houseRentAllowance: this.money(snapshot.hra),
+
+        payment: {
+          status: paymentStatus,
+
+          modeOfPayment:
+            paymentStatus === 'PAID'
+              ? (snapshot.payment?.paymentMode ?? null)
+              : null,
+        },
+
+        signatureOfWorkman: null,
+        remarks: null,
+      };
+    });
+
+    const totals = employees.reduce(
+      (total, employee) => {
+        total.wages += employee.wages;
+        total.houseRentAllowance += employee.houseRentAllowance;
+
+        return total;
+      },
+      {
+        wages: 0,
+        houseRentAllowance: 0,
+      },
+    );
+
+    return {
+      success: true,
+      message: 'HRA Register fetched successfully.',
+
+      data: {
+        report: {
+          type: 'HRA_REGISTER_FORM_A',
+
+          salaryMonth: payrollRun.salaryMonth,
+
+          payrollRun: {
+            id: payrollRun.id,
+            version: payrollRun.version,
+            status: payrollRun.status,
+            finalizedAt: payrollRun.finalizedAt,
+            unlockedAt: payrollRun.unlockedAt,
+          },
+
+          employeeCount: employees.length,
+        },
+
+        employees,
+
+        totals: {
+          wages: this.money(totals.wages),
+
+          houseRentAllowance: this.money(totals.houseRentAllowance),
+        },
+      },
+    };
+  }
+  // =========================================================
   // PAYROLL PAYMENT - VALIDATE INPUT
   // =========================================================
 

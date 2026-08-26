@@ -15,6 +15,7 @@ import { BulkUpdatePayrollPaymentDto } from './dto/bulk-update-payroll-payment.d
 import { SalaryRegisterQueryDto } from './dto/salary-register-query.dto';
 import { BankTransferQueryDto } from './dto/bank-transfer-query.dto';
 import { PayslipQueryDto } from './dto/payslip-query.dto';
+import { HraRegisterQueryDto } from './dto/hra-register-query.dto';
 
 @Controller('payroll/reports')
 export class PayrollReportsController {
@@ -106,5 +107,19 @@ export class PayrollReportsController {
   @Get('payslip')
   async getPayslip(@Query() query: PayslipQueryDto) {
     return this.payrollReportsService.getPayslip(new Date(query.salaryMonth));
+  }
+  // =========================================================
+  // HRA REGISTER - FORM A
+  //
+  // Company-wide statutory Payroll Report.
+  //
+  // No Site / Work Type / Department filters.
+  // =========================================================
+
+  @Get('hra-register')
+  async getHraRegister(@Query() query: HraRegisterQueryDto) {
+    return this.payrollReportsService.getHraRegister(
+      new Date(query.salaryMonth),
+    );
   }
 }
