@@ -36,6 +36,21 @@ export class PayrollReportsRepository {
 
       include: {
         snapshots: {
+          where: {
+            OR: [
+              {
+                payableDays: {
+                  gt: 0,
+                },
+              },
+              {
+                otHours: {
+                  gt: 0,
+                },
+              },
+            ],
+          },
+
           orderBy: {
             employeeId: 'asc',
           },
@@ -327,6 +342,21 @@ export class PayrollReportsRepository {
 
       include: {
         snapshots: {
+          where: {
+            OR: [
+              {
+                payableDays: {
+                  gt: 0,
+                },
+              },
+              {
+                otHours: {
+                  gt: 0,
+                },
+              },
+            ],
+          },
+
           orderBy: {
             employeeId: 'asc',
           },
