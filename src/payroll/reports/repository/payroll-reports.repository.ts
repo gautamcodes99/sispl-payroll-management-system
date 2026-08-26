@@ -338,4 +338,87 @@ export class PayrollReportsRepository {
       },
     });
   }
+  // =========================================================
+  // PAYSLIP - MONTHLY SITE ATTENDANCE
+  //
+  // Payslip is company-wide, but each employee's payslip must
+  // display the Site(s) where the employee earned the highest
+  // payable attendance during the salary month.
+  //
+  // Payable attendance:
+  // PRESENT      = 1
+  // HALF_DAY     = 0.5
+  // PAID_HOLIDAY = 1
+  //
+  // Site is derived through:
+  // Attendance -> Department -> Work Type -> Site
+  //
+  // OT hours do not participate in Site selection.
+  // =========================================================
+
+  async findPayslipMonthlySiteAttendance(
+    salaryMonth: Date,
+    employeeIds: number[],
+  ) {
+    if (employeeIds.length === 0) {
+      return [];
+    }
+
+    const startDate = new Date(
+      Date.UTC(salaryMonth.getUTCFullYear(), salaryMonth.getUTCMonth(), 1),
+    );
+
+    const endDate = new Date(
+      Date.UTC(salaryMonth.getUTCFullYear(), salaryMonth.getUTCMonth() + 1, 1),
+    );
+
+    return this.prisma.attendance.findMany({
+      where: {
+        employeeId: {
+          in: employeeIds,
+        },
+
+        attendanceDate: {
+          gte: startDate,
+          lt: endDate,
+        },
+
+        departmentId: {
+          not: null,
+        },
+      },
+
+      orderBy: [
+        {
+          employeeId: 'asc',
+        },
+        {
+          attendanceDate: 'asc',
+        },
+        {
+          shift: 'asc',
+        },
+      ],
+
+      select: {
+        employeeId: true,
+        status: true,
+
+        department: {
+          select: {
+            workType: {
+              select: {
+                site: {
+                  select: {
+                    id: true,
+                    siteName: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+  }
 }

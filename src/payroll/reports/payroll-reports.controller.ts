@@ -14,6 +14,7 @@ import { UpdatePayrollPaymentDto } from './dto/update-payroll-payment.dto';
 import { BulkUpdatePayrollPaymentDto } from './dto/bulk-update-payroll-payment.dto';
 import { SalaryRegisterQueryDto } from './dto/salary-register-query.dto';
 import { BankTransferQueryDto } from './dto/bank-transfer-query.dto';
+import { PayslipQueryDto } from './dto/payslip-query.dto';
 
 @Controller('payroll/reports')
 export class PayrollReportsController {
@@ -94,5 +95,16 @@ export class PayrollReportsController {
     return this.payrollReportsService.getBankTransferStatement(
       new Date(query.salaryMonth),
     );
+  }
+  // =========================================================
+  // PAYSLIP
+  //
+  // Company-wide monthly Payslip report.
+  // Site is derived per employee from monthly Attendance.
+  // =========================================================
+
+  @Get('payslip')
+  async getPayslip(@Query() query: PayslipQueryDto) {
+    return this.payrollReportsService.getPayslip(new Date(query.salaryMonth));
   }
 }

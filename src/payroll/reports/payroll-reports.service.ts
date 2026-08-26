@@ -1044,6 +1044,256 @@ export class PayrollReportsService {
     };
   }
   // =========================================================
+  // PAYSLIP
+  //
+  // Company-wide Payroll Report.
+  //
+  // Payroll monetary values come exclusively from the current
+  // persisted FINALIZED / UNLOCKED Payroll Employee Snapshot.
+  //
+  // Site is Payslip display context and is derived separately
+  // from monthly Attendance.
+  //
+  // Site selection:
+  // - PRESENT      = 1 payable day
+  // - HALF_DAY     = 0.5 payable day
+  // - PAID_HOLIDAY = 1 payable day
+  // - all other statuses = 0
+  //
+  // The Site(s) with the highest payable attendance are shown.
+  // Equal highest totals retain all tied Sites.
+  //
+  // RATE PER DAY is Payslip-only:
+  //
+  // Minimum Wage Rate = Monthly Basic + Monthly DA
+  // Rate Per Day = Minimum Wage Rate
+  //                + (Minimum Wage Rate * 5%)
+  //
+  // It intentionally does NOT alter payroll calculation.
+  //
+  // Current fixed Payslip-only fields:
+  // Leave Pay       = 0.00
+  // Adjusted Days   = 0.00
+  // Other Allowance = 0.00
+  // =========================================================
+
+  async getPayslip(salaryMonthInput: Date) {
+    if (Number.isNaN(salaryMonthInput.getTime())) {
+      throw new BadRequestException('Salary month is invalid.');
+    }
+
+    const salaryMonth = this.normalizeSalaryMonth(salaryMonthInput);
+
+    const payrollRun =
+      await this.payrollReportsRepository.findCurrentPayrollRunWithSnapshots(
+        salaryMonth,
+      );
+
+    if (!payrollRun) {
+      throw new NotFoundException(
+        `No current finalized Payroll Run found for ${salaryMonth.toISOString()}.`,
+      );
+    }
+
+    const employeeIds = payrollRun.snapshots.map(
+      (snapshot) => snapshot.employeeId,
+    );
+
+    const siteAttendances =
+      await this.payrollReportsRepository.findPayslipMonthlySiteAttendance(
+        salaryMonth,
+        employeeIds,
+      );
+
+    const sitePayableDaysByEmployee = new Map<
+      number,
+      Map<number, { siteName: string; payableDays: number }>
+    >();
+
+    for (const attendance of siteAttendances) {
+      const site = attendance.department?.workType?.site;
+
+      if (!site) {
+        continue;
+      }
+
+      let payableValue = 0;
+
+      switch (attendance.status) {
+        case 'PRESENT':
+          payableValue = 1;
+          break;
+
+        case 'HALF_DAY':
+          payableValue = 0.5;
+          break;
+
+        case 'PAID_HOLIDAY':
+          payableValue = 1;
+          break;
+
+        default:
+          payableValue = 0;
+          break;
+      }
+
+      if (payableValue === 0) {
+        continue;
+      }
+
+      let employeeSites = sitePayableDaysByEmployee.get(attendance.employeeId);
+
+      if (!employeeSites) {
+        employeeSites = new Map<
+          number,
+          { siteName: string; payableDays: number }
+        >();
+
+        sitePayableDaysByEmployee.set(attendance.employeeId, employeeSites);
+      }
+
+      const currentSite = employeeSites.get(site.id);
+
+      if (currentSite) {
+        currentSite.payableDays += payableValue;
+      } else {
+        employeeSites.set(site.id, {
+          siteName: site.siteName,
+          payableDays: payableValue,
+        });
+      }
+    }
+
+    const employees = payrollRun.snapshots.map((snapshot, index) => {
+      const employeeSites = sitePayableDaysByEmployee.get(snapshot.employeeId);
+
+      let siteNames: string[] = [];
+
+      if (employeeSites && employeeSites.size > 0) {
+        const sites = Array.from(employeeSites.values());
+
+        const highestPayableDays = Math.max(
+          ...sites.map((site) => site.payableDays),
+        );
+
+        siteNames = sites
+          .filter((site) => site.payableDays === highestPayableDays)
+          .map((site) => site.siteName)
+          .sort((a, b) => a.localeCompare(b));
+      }
+
+      const monthlyBasic = this.money(snapshot.monthlyBasic);
+      const monthlyDa = this.money(snapshot.monthlyDa);
+
+      const minimumWageRate = this.money(monthlyBasic + monthlyDa);
+
+      const ratePerDay = this.money(
+        (minimumWageRate + minimumWageRate * 0.05) / 26,
+      );
+
+      return {
+        serialNumber: index + 1,
+
+        snapshotId: snapshot.id,
+
+        employeeId: snapshot.employeeId,
+        employeeName: snapshot.employeeName,
+
+        gender: snapshot.gender,
+        designation: snapshot.designationName,
+
+        siteName: siteNames.length > 0 ? siteNames.join(', ') : null,
+
+        uanNumber: snapshot.uanNumber,
+        esicNumber: snapshot.esicNumber,
+
+        attendance: {
+          presentDays: Number(snapshot.presentDays),
+          halfDays: Number(snapshot.halfDays),
+          paidHolidays: Number(snapshot.paidHolidays),
+          payableDays: Number(snapshot.payableDays),
+          otHours: Number(snapshot.otHours),
+
+          adjustedDays: 0,
+        },
+
+        rates: {
+          monthlyBasic,
+          monthlyDa,
+          minimumWageRate,
+          ratePerDay,
+          otRate: this.money(snapshot.otRate),
+        },
+
+        earnings: {
+          earnedBasic: this.money(snapshot.earnedBasic),
+          earnedDa: this.money(snapshot.earnedDa),
+
+          wages: this.money(snapshot.wages),
+
+          hra: this.money(snapshot.hra),
+
+          otAmount: this.money(snapshot.otAmount),
+
+          conveyance: this.money(snapshot.conveyance),
+
+          specialAllowance: this.money(snapshot.specialAllowanceAmount),
+
+          rab: this.money(snapshot.rab),
+          arrears: this.money(snapshot.arrears),
+
+          leavePay: 0,
+          otherAllowance: 0,
+
+          gross: this.money(snapshot.gross),
+        },
+
+        deductions: {
+          pf: this.money(snapshot.pf),
+          esic: this.money(snapshot.esic),
+          ptax: this.money(snapshot.ptax),
+          mlwf: this.money(snapshot.mlwf),
+
+          advanceRecovery: this.money(snapshot.advanceRecovery),
+          canteen: this.money(snapshot.canteen),
+          transport: this.money(snapshot.transport),
+          uniformRecovery: this.money(snapshot.uniformRecovery),
+          fine: this.money(snapshot.fine),
+          otherDeduction: this.money(snapshot.otherDeduction),
+
+          totalDeductions: this.money(snapshot.totalDeductions),
+        },
+
+        netSalary: this.money(snapshot.netSalary),
+      };
+    });
+
+    return {
+      success: true,
+      message: 'Payslip fetched successfully.',
+
+      data: {
+        report: {
+          type: 'PAYSLIP',
+
+          salaryMonth: payrollRun.salaryMonth,
+
+          payrollRun: {
+            id: payrollRun.id,
+            version: payrollRun.version,
+            status: payrollRun.status,
+            finalizedAt: payrollRun.finalizedAt,
+            unlockedAt: payrollRun.unlockedAt,
+          },
+
+          employeeCount: employees.length,
+        },
+
+        employees,
+      },
+    };
+  }
+  // =========================================================
   // PAYROLL PAYMENT - VALIDATE INPUT
   // =========================================================
 
