@@ -711,6 +711,9 @@ export class PayrollReportsService {
         employeeId: snapshot.employeeId,
         employeeName: snapshot.employeeName,
 
+        uanNumber: snapshot.uanNumber,
+        esicNumber: snapshot.esicNumber,
+
         gender: snapshot.gender,
         designation: snapshot.designationName,
 
