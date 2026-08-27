@@ -55,8 +55,12 @@ export class PayrollReportsService {
   // Only report-only derived value:
   // Minimum Wage Per Day = (Monthly Basic + Monthly DA) / 26
   //
-  // DATE OF PAYMENT and MODE OF PAYMENT are intentionally
-  // excluded for now and will be implemented later.
+  // DATE OF PAYMENT and MODE OF PAYMENT come from the
+  // existing optional PayrollPayment record belonging to the
+  // finalized PayrollEmployeeSnapshot.
+  //
+  // No payment row means:
+  // UNPAID / null date / null mode.
   // =========================================================
 
   async getWageSheet(salaryMonthInput: Date) {
@@ -67,7 +71,7 @@ export class PayrollReportsService {
     const salaryMonth = this.normalizeSalaryMonth(salaryMonthInput);
 
     const payrollRun =
-      await this.payrollReportsRepository.findCurrentPayrollRunWithSnapshots(
+      await this.payrollReportsRepository.findCurrentPayrollRunWithSnapshotsAndPayments(
         salaryMonth,
       );
 
@@ -134,6 +138,12 @@ export class PayrollReportsService {
         totalDeduction: this.money(snapshot.totalDeductions),
 
         netPaid: this.money(snapshot.netSalary),
+
+        payment: {
+          status: snapshot.payment?.status ?? 'UNPAID',
+          paymentDate: snapshot.payment?.paymentDate ?? null,
+          paymentMode: snapshot.payment?.paymentMode ?? null,
+        },
       };
     });
 
@@ -666,6 +676,7 @@ export class PayrollReportsService {
       },
     };
   }
+
   // =========================================================
   // SALARY REGISTER
   //
@@ -1046,6 +1057,7 @@ export class PayrollReportsService {
       },
     };
   }
+
   // =========================================================
   // PAYSLIP
   //
@@ -1296,6 +1308,7 @@ export class PayrollReportsService {
       },
     };
   }
+
   // =========================================================
   // HRA REGISTER - FORM A
   //
@@ -1414,6 +1427,7 @@ export class PayrollReportsService {
       },
     };
   }
+
   // =========================================================
   // PAYROLL PAYMENT - VALIDATE INPUT
   // =========================================================
