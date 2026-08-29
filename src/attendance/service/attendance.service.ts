@@ -355,6 +355,28 @@ export class AttendanceService {
         return '';
     }
   }
+  private getAttendanceReportShiftOrder(shift: string): number {
+    switch (shift) {
+      case 'FIRST':
+        return 1;
+      case 'SECOND':
+        return 2;
+      case 'THIRD':
+        return 3;
+      default:
+        return 999;
+    }
+  }
+
+  private sortAttendanceReportCodes(
+    entries: Array<{ shift: string; code: string }>,
+  ): Array<{ shift: string; code: string }> {
+    return entries.sort(
+      (a, b) =>
+        this.getAttendanceReportShiftOrder(a.shift) -
+        this.getAttendanceReportShiftOrder(b.shift),
+    );
+  }
 
   private calculateAttendanceReportAge(
     dateOfBirth: Date | null,
@@ -469,7 +491,7 @@ export class AttendanceService {
       joiningDate: Date;
       designationId: number;
       designationName: string;
-      attendanceByDay: Map<number, string>;
+      attendanceByDay: Map<number, Array<{ shift: string; code: string }>>;
     };
 
     const employeeMap = new Map<number, MusterEmployeeAccumulator>();
@@ -488,7 +510,7 @@ export class AttendanceService {
           joiningDate: employee.joiningDate,
           designationId: employee.designation.id,
           designationName: employee.designation.designationName,
-          attendanceByDay: new Map<number, string>(),
+          attendanceByDay: new Map(),
         };
 
         employeeMap.set(employee.id, accumulator);
@@ -502,17 +524,14 @@ export class AttendanceService {
         continue;
       }
 
-      /*
-       * Muster contains one attendance code per employee/date.
-       *
-       * If the query is not shift-filtered and more than one
-       * attendance row exists for the same employee/date,
-       * preserve the first valid attendance code returned by
-       * the ordered database query rather than double-counting.
-       */
-      if (!accumulator.attendanceByDay.has(day)) {
-        accumulator.attendanceByDay.set(day, code);
-      }
+      const dayEntries = accumulator.attendanceByDay.get(day) ?? [];
+
+      dayEntries.push({
+        shift: attendance.shift,
+        code,
+      });
+
+      accumulator.attendanceByDay.set(day, dayEntries);
     }
 
     // -------------------------------------------------------
@@ -548,23 +567,30 @@ export class AttendanceService {
         const days = Array.from({ length: daysInMonth }, (_, dayIndex) => {
           const day = dayIndex + 1;
 
-          const code = employee.attendanceByDay.get(day) ?? '';
+          const entries = this.sortAttendanceReportCodes(
+            employee.attendanceByDay.get(day) ?? [],
+          );
 
-          if (code === 'P') {
-            employeeDays += 1;
-            dailyTotals[dayIndex].mandays += 1;
-          } else if (code === 'HD') {
-            employeeDays += 0.5;
-            dailyTotals[dayIndex].mandays += 0.5;
+          let dayMandays = 0;
+
+          for (const entry of entries) {
+            if (entry.code === 'P') {
+              dayMandays += 1;
+            } else if (entry.code === 'HD') {
+              dayMandays += 0.5;
+            }
+
+            if (entry.code === 'PH') {
+              employeePaidHolidays += 1;
+            }
           }
 
-          if (code === 'PH') {
-            employeePaidHolidays += 1;
-          }
+          employeeDays += dayMandays;
+          dailyTotals[dayIndex].mandays += dayMandays;
 
           return {
             day,
-            code,
+            code: entries.map((entry) => entry.code).join('/'),
           };
         });
 
@@ -969,7 +995,7 @@ export class AttendanceService {
       designationId: number;
       designationName: string;
 
-      attendanceByDay: Map<number, string>;
+      attendanceByDay: Map<number, Array<{ shift: string; code: string }>>;
       otByDay: Map<number, number>;
     };
 
@@ -989,7 +1015,7 @@ export class AttendanceService {
           joiningDate: employee.joiningDate,
           designationId: employee.designation.id,
           designationName: employee.designation.designationName,
-          attendanceByDay: new Map<number, string>(),
+          attendanceByDay: new Map(),
           otByDay: new Map<number, number>(),
         };
 
@@ -1004,8 +1030,15 @@ export class AttendanceService {
 
       const code = this.mapAttendanceStatusToReportCode(attendance.status);
 
-      if (code && !accumulator.attendanceByDay.has(day)) {
-        accumulator.attendanceByDay.set(day, code);
+      if (code) {
+        const dayEntries = accumulator.attendanceByDay.get(day) ?? [];
+
+        dayEntries.push({
+          shift: attendance.shift,
+          code,
+        });
+
+        accumulator.attendanceByDay.set(day, dayEntries);
       }
 
       // -----------------------------------------------------
@@ -1060,23 +1093,30 @@ export class AttendanceService {
         const days = Array.from({ length: daysInMonth }, (_, dayIndex) => {
           const day = dayIndex + 1;
 
-          const code = employee.attendanceByDay.get(day) ?? '';
+          const entries = this.sortAttendanceReportCodes(
+            employee.attendanceByDay.get(day) ?? [],
+          );
+
+          const code = entries.map((entry) => entry.code).join('/');
 
           const otHours = employee.otByDay.get(day) ?? 0;
 
-          // Mandays
-          if (code === 'P') {
-            employeeDays += 1;
-            dailyTotals[dayIndex].mandays += 1;
-          } else if (code === 'HD') {
-            employeeDays += 0.5;
-            dailyTotals[dayIndex].mandays += 0.5;
+          let dayMandays = 0;
+
+          for (const entry of entries) {
+            if (entry.code === 'P') {
+              dayMandays += 1;
+            } else if (entry.code === 'HD') {
+              dayMandays += 0.5;
+            }
+
+            if (entry.code === 'PH') {
+              employeePaidHolidays += 1;
+            }
           }
 
-          // Paid Holiday
-          if (code === 'PH') {
-            employeePaidHolidays += 1;
-          }
+          employeeDays += dayMandays;
+          dailyTotals[dayIndex].mandays += dayMandays;
 
           // Manual OT
           employeeOtHours += otHours;

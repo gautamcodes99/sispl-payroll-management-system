@@ -325,6 +325,27 @@ export class PayrollReportsService {
         return '';
     }
   }
+  private getFormIiShiftOrder(shift: string): number {
+    switch (shift) {
+      case 'FIRST':
+        return 1;
+      case 'SECOND':
+        return 2;
+      case 'THIRD':
+        return 3;
+      default:
+        return 999;
+    }
+  }
+
+  private sortFormIiAttendanceCodes(
+    entries: Array<{ shift: string; code: string }>,
+  ): Array<{ shift: string; code: string }> {
+    return entries.sort(
+      (a, b) =>
+        this.getFormIiShiftOrder(a.shift) - this.getFormIiShiftOrder(b.shift),
+    );
+  }
 
   // =========================================================
   // FORM II - AGE
@@ -421,7 +442,7 @@ export class PayrollReportsService {
     ).getUTCDate();
 
     type AttendanceEmployeeContext = {
-      attendanceByDay: Map<number, string>;
+      attendanceByDay: Map<number, Array<{ shift: string; code: string }>>;
     };
 
     const attendanceByEmployee = new Map<number, AttendanceEmployeeContext>();
@@ -431,7 +452,7 @@ export class PayrollReportsService {
 
       if (!employeeContext) {
         employeeContext = {
-          attendanceByDay: new Map<number, string>(),
+          attendanceByDay: new Map(),
         };
 
         attendanceByEmployee.set(attendance.employeeId, employeeContext);
@@ -445,16 +466,14 @@ export class PayrollReportsService {
 
       const day = attendance.attendanceDate.getUTCDate();
 
-      /*
-       * Same finalized Muster rule:
-       *
-       * If more than one shift row exists for an employee on
-       * the same date, preserve the first valid attendance code
-       * returned by the ordered repository query.
-       */
-      if (!employeeContext.attendanceByDay.has(day)) {
-        employeeContext.attendanceByDay.set(day, code);
-      }
+      const dayEntries = employeeContext.attendanceByDay.get(day) ?? [];
+
+      dayEntries.push({
+        shift: attendance.shift,
+        code,
+      });
+
+      employeeContext.attendanceByDay.set(day, dayEntries);
     }
 
     const employees = payrollRun.snapshots.map((snapshot, index) => {
@@ -465,9 +484,13 @@ export class PayrollReportsService {
       const days = Array.from({ length: daysInMonth }, (_, dayIndex) => {
         const day = dayIndex + 1;
 
+        const entries = this.sortFormIiAttendanceCodes(
+          attendanceContext?.attendanceByDay.get(day) ?? [],
+        );
+
         return {
           day,
-          code: attendanceContext?.attendanceByDay.get(day) ?? '',
+          code: entries.map((entry) => entry.code).join('/'),
         };
       });
 
