@@ -5,6 +5,7 @@ import { EmployeeModule } from './employee/employee.module';
 import { PrismaService } from './prisma/prisma.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { AttendanceModule } from './attendance/attendance.module';
+import { OtAttendanceModule } from './ot-attendance/ot-attendance.module';
 import { OrganisationModule } from './organisation/organisation.module';
 import { WageMasterModule } from './wage-master/wage-master.module';
 import { VariableAllowanceModule } from './variable-allowance/variable-allowance.module';
@@ -17,6 +18,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
     EmployeeModule,
     PrismaModule,
     AttendanceModule,
+    OtAttendanceModule,
     OrganisationModule,
     WageMasterModule,
     VariableAllowanceModule,

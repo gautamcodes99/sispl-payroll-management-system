@@ -41,6 +41,7 @@ model Employee {
   leftReason          String?
 
   attendances        Attendance[]
+  otAttendances      OtAttendance[]
   designation        Designation               @relation(fields: [designationId], references: [id])
   variableAllowances VariableAllowance[]
   manualDeductions   ManualDeduction[]
@@ -76,14 +77,16 @@ model WorkType {
 }
 
 model Department {
-  id             Int          @id @default(autoincrement())
+  id             Int      @id @default(autoincrement())
   workTypeId     Int
   departmentName String
-  status         String       @default("ACTIVE")
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  workType       WorkType     @relation(fields: [workTypeId], references: [id], onDelete: Cascade)
-  attendances    Attendance[]
+  status         String   @default("ACTIVE")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  workType      WorkType       @relation(fields: [workTypeId], references: [id], onDelete: Cascade)
+  attendances   Attendance[]
+  otAttendances OtAttendance[]
 
   @@unique([workTypeId, departmentName])
 }
@@ -95,27 +98,53 @@ model Designation {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  employees   Employee[]
-  wageMasters WageMaster[]
+  employees     Employee[]
+  wageMasters   WageMaster[]
+  attendances   Attendance[]
+  otAttendances OtAttendance[]
 }
 
 model Attendance {
   id             Int              @id @default(autoincrement())
   employeeId     Int
   departmentId   Int?
+  designationId  Int
   attendanceDate DateTime
-  otHours        Decimal          @default(0) @db.Decimal(5, 2)
   remarks        String?
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   status         AttendanceStatus
   shift          AttendanceShift
 
-  employee   Employee    @relation(fields: [employeeId], references: [id])
-  department Department? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  employee    Employee    @relation(fields: [employeeId], references: [id])
+  department  Department? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  designation Designation @relation(fields: [designationId], references: [id], onDelete: Restrict)
 
   @@unique([employeeId, attendanceDate, shift])
   @@index([departmentId])
+  @@index([designationId])
+}
+
+model OtAttendance {
+  id             Int             @id @default(autoincrement())
+  employeeId     Int
+  departmentId   Int?
+  designationId  Int
+  attendanceDate DateTime
+  shift          AttendanceShift
+  otHours        Decimal         @db.Decimal(5, 2)
+  remarks        String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  employee    Employee    @relation(fields: [employeeId], references: [id])
+  department  Department? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  designation Designation @relation(fields: [designationId], references: [id], onDelete: Restrict)
+
+  @@unique([employeeId, attendanceDate, shift])
+  @@index([departmentId])
+  @@index([designationId])
+  @@index([attendanceDate])
 }
 
 model WageMaster {

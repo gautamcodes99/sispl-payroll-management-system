@@ -2,14 +2,15 @@ import {
   IsDateString,
   IsEnum,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { AttendanceShift, AttendanceStatus } from '@prisma/client';
+import { AttendanceShift } from '@prisma/client';
 
-export class UpdateAttendanceDto {
+export class UpdateOtAttendanceDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -33,12 +34,14 @@ export class UpdateAttendanceDto {
   attendanceDate?: Date;
 
   @IsOptional()
-  @IsEnum(AttendanceStatus)
-  status?: AttendanceStatus;
-
-  @IsOptional()
   @IsEnum(AttendanceShift)
   shift?: AttendanceShift;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.01)
+  otHours?: number;
 
   @IsOptional()
   @IsString()

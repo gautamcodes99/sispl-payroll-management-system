@@ -2,7 +2,6 @@ import {
   IsDateString,
   IsEnum,
   IsInt,
-  IsNumber,
   IsOptional,
   IsString,
   Min,
@@ -13,12 +12,18 @@ import { AttendanceShift, AttendanceStatus } from '@prisma/client';
 export class CreateAttendanceDto {
   @Type(() => Number)
   @IsInt()
+  @Min(1)
   employeeId!: number;
 
   @Type(() => Number)
   @IsInt()
   @Min(1)
   departmentId!: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  designationId!: number;
 
   @IsDateString()
   attendanceDate!: Date;
@@ -28,11 +33,6 @@ export class CreateAttendanceDto {
 
   @IsEnum(AttendanceShift)
   shift!: AttendanceShift;
-
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  otHours!: number;
 
   @IsOptional()
   @IsString()

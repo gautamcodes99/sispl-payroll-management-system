@@ -16,7 +16,6 @@ import { AttendanceQueryDto } from '../dto/attendance-query.dto';
 import { PendingAttendanceQueryDto } from '../dto/pending-attendance-query.dto';
 import { AttendanceDashboardQueryDto } from '../dto/attendance-dashboard-query.dto';
 import { BulkAttendanceDto } from '../dto/bulk-attendance.dto';
-import { BulkOtUpdateDto } from '../dto/bulk-ot-update.dto';
 import { MonthlyAttendanceQueryDto } from '../dto/monthly-attendance-query.dto';
 import { AttendanceReportQueryDto } from '../dto/attendance-report-query.dto';
 import { FormXxiiiReportQueryDto } from '../dto/form-xxiii-report-query.dto';
@@ -34,10 +33,6 @@ export class AttendanceController {
   @Post('bulk')
   bulkCreate(@Body() bulkAttendanceDto: BulkAttendanceDto) {
     return this.attendanceService.bulkCreateAttendance(bulkAttendanceDto);
-  }
-  @Patch('bulk-ot')
-  bulkUpdateOt(@Body() bulkOtUpdateDto: BulkOtUpdateDto) {
-    return this.attendanceService.bulkUpdateOt(bulkOtUpdateDto);
   }
 
   @Get()

@@ -4,7 +4,6 @@ import { CreateAttendanceDto } from '../dto/create-attendance.dto';
 import { UpdateAttendanceDto } from '../dto/update-attendance.dto';
 import { AttendanceQueryDto } from '../dto/attendance-query.dto';
 import { BulkAttendanceDto } from '../dto/bulk-attendance.dto';
-import { BulkOtUpdateDto } from '../dto/bulk-ot-update.dto';
 import { MonthlyAttendanceQueryDto } from '../dto/monthly-attendance-query.dto';
 import { AttendanceShift, Prisma } from '@prisma/client';
 import { AttendanceReportQueryDto } from '../dto/attendance-report-query.dto';
@@ -39,8 +38,13 @@ export class AttendanceRepository {
     attendanceDate: true,
     status: true,
     shift: true,
-    otHours: true,
     remarks: true,
+    designation: {
+      select: {
+        id: true,
+        designationName: true,
+      },
+    },
 
     department: {
       select: {
@@ -90,10 +94,15 @@ export class AttendanceRepository {
     attendanceDate: true,
     status: true,
     shift: true,
-    otHours: true,
     remarks: true,
     createdAt: true,
     updatedAt: true,
+    designation: {
+      select: {
+        id: true,
+        designationName: true,
+      },
+    },
 
     department: {
       select: {
@@ -168,6 +177,26 @@ export class AttendanceRepository {
 
       select: {
         id: true,
+      },
+    });
+  }
+  // =========================================================
+  // WORKED DESIGNATION CONTEXT
+  //
+  // Attendance designation is operational for this entry.
+  // It does NOT need to equal Employee.designationId.
+  // =========================================================
+
+  async findDesignationAttendanceContext(designationId: number) {
+    return this.prisma.designation.findUnique({
+      where: {
+        id: designationId,
+      },
+
+      select: {
+        id: true,
+        designationName: true,
+        status: true,
       },
     });
   }
@@ -256,14 +285,17 @@ export class AttendanceRepository {
             id: createAttendanceDto.departmentId,
           },
         },
+        designation: {
+          connect: {
+            id: createAttendanceDto.designationId,
+          },
+        },
 
         attendanceDate: new Date(createAttendanceDto.attendanceDate),
 
         status: createAttendanceDto.status,
 
         shift: createAttendanceDto.shift,
-
-        otHours: createAttendanceDto.otHours,
 
         remarks: createAttendanceDto.remarks,
       },
@@ -347,18 +379,24 @@ export class AttendanceRepository {
     }
 
     // =======================================================
-    // EMPLOYEE FILTERS
+    // WORKED DESIGNATION FILTER
     //
-    // Employee -> Designation
-    // Designation is company-wide.
+    // Attendance.designationId is the operational designation
+    // selected for this attendance entry.
+    // It is independent of Employee.designationId, which remains
+    // the employee's master/payroll designation.
     // =======================================================
 
-    if (designationId || search) {
-      const employeeWhere: Prisma.EmployeeWhereInput = {};
+    if (designationId) {
+      where.designationId = designationId;
+    }
 
-      if (designationId) {
-        employeeWhere.designationId = designationId;
-      }
+    // =======================================================
+    // EMPLOYEE SEARCH
+    // =======================================================
+
+    if (search) {
+      const employeeWhere: Prisma.EmployeeWhereInput = {};
 
       if (search) {
         employeeWhere.OR = [
@@ -686,6 +724,11 @@ export class AttendanceRepository {
                 id: bulkAttendanceDto.departmentId,
               },
             },
+            designation: {
+              connect: {
+                id: bulkAttendanceDto.designationId,
+              },
+            },
 
             attendanceDate,
 
@@ -693,38 +736,10 @@ export class AttendanceRepository {
 
             shift: bulkAttendanceDto.shift,
 
-            otHours: bulkAttendanceDto.otHours,
-
             remarks: bulkAttendanceDto.remarks,
           },
 
           select: this.attendanceDetailSelect,
-        }),
-      ),
-    );
-  }
-
-  // =========================================================
-  // BULK OT UPDATE
-  // =========================================================
-
-  async bulkUpdateOt(bulkOtUpdateDto: BulkOtUpdateDto) {
-    const attendanceDate = new Date(bulkOtUpdateDto.attendanceDate);
-
-    return this.prisma.$transaction(
-      bulkOtUpdateDto.employees.map((employee) =>
-        this.prisma.attendance.updateMany({
-          where: {
-            employeeId: employee.employeeId,
-
-            attendanceDate,
-
-            shift: employee.shift,
-          },
-
-          data: {
-            otHours: employee.otHours,
-          },
         }),
       ),
     );
@@ -741,30 +756,57 @@ export class AttendanceRepository {
 
     const endDate = new Date(year, month, 1);
 
-    const attendances = await this.prisma.attendance.findMany({
-      where: {
-        employeeId,
+    // =======================================================
+    // DAILY ATTENDANCE + DAILY OT ATTENDANCE
+    //
+    // Attendance provides attendance status.
+    // OtAttendance provides manually entered OT hours.
+    //
+    // OT is no longer read from legacy Attendance.otHours.
+    // =======================================================
 
-        attendanceDate: {
-          gte: startDate,
-          lt: endDate,
-        },
-      },
+    const [attendances, otAttendances] = await Promise.all([
+      this.prisma.attendance.findMany({
+        where: {
+          employeeId,
 
-      select: {
-        status: true,
-        otHours: true,
-
-        employee: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
+          attendanceDate: {
+            gte: startDate,
+            lt: endDate,
           },
         },
-      },
-    });
 
+        select: {
+          status: true,
+
+          employee: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
+        },
+      }),
+
+      this.prisma.otAttendance.findMany({
+        where: {
+          employeeId,
+
+          attendanceDate: {
+            gte: startDate,
+            lt: endDate,
+          },
+        },
+
+        select: {
+          otHours: true,
+        },
+      }),
+    ]);
+
+    // Preserve the existing Monthly Attendance Summary behavior:
+    // the summary exists only when Daily Attendance exists.
     if (attendances.length === 0) {
       return null;
     }
@@ -776,7 +818,10 @@ export class AttendanceRepository {
     let weeklyOff = 0;
     let halfDay = 0;
     let paidHoliday = 0;
-    let otHours = 0;
+
+    // =======================================================
+    // ATTENDANCE STATUS TOTALS
+    // =======================================================
 
     attendances.forEach((attendance) => {
       switch (attendance.status) {
@@ -808,9 +853,19 @@ export class AttendanceRepository {
           paidHoliday++;
           break;
       }
-
-      otHours += Number(attendance.otHours);
     });
+
+    // =======================================================
+    // MANUAL OT TOTAL
+    //
+    // Every legitimate Daily OT Attendance row is counted.
+    // Therefore multiple shifts for the same employee/date
+    // are correctly summed.
+    // =======================================================
+
+    const otHours = otAttendances.reduce((total, otAttendance) => {
+      return total + Number(otAttendance.otHours);
+    }, 0);
 
     const employee = attendances[0].employee;
 
@@ -949,7 +1004,115 @@ export class AttendanceRepository {
         attendanceDate: true,
         status: true,
         shift: true,
+
+        designation: {
+          select: {
+            id: true,
+            designationName: true,
+          },
+        },
+        employee: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            gender: true,
+            dateOfBirth: true,
+            joiningDate: true,
+
+            designation: {
+              select: {
+                id: true,
+                designationName: true,
+              },
+            },
+          },
+        },
+
+        department: {
+          select: {
+            id: true,
+            departmentName: true,
+
+            workType: {
+              select: {
+                id: true,
+                workTypeName: true,
+
+                site: {
+                  select: {
+                    id: true,
+                    siteName: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+  async findMonthlyOtAttendanceReportData(query: AttendanceReportQueryDto) {
+    const startDate = new Date(Date.UTC(query.year, query.month - 1, 1));
+
+    const endDate = new Date(Date.UTC(query.year, query.month, 1));
+
+    const where: Prisma.OtAttendanceWhereInput = {
+      attendanceDate: {
+        gte: startDate,
+        lt: endDate,
+      },
+
+      departmentId: query.departmentId,
+
+      department: {
+        workTypeId: query.workTypeId,
+
+        workType: {
+          siteId: query.siteId,
+        },
+      },
+    };
+
+    if (query.shift) {
+      where.shift = query.shift;
+    }
+
+    return this.prisma.otAttendance.findMany({
+      where,
+
+      orderBy: [
+        {
+          employee: {
+            firstName: 'asc',
+          },
+        },
+        {
+          employee: {
+            lastName: 'asc',
+          },
+        },
+        {
+          attendanceDate: 'asc',
+        },
+        {
+          shift: 'asc',
+        },
+      ],
+
+      select: {
+        id: true,
+        employeeId: true,
+        attendanceDate: true,
+        shift: true,
         otHours: true,
+
+        designation: {
+          select: {
+            id: true,
+            designationName: true,
+          },
+        },
 
         employee: {
           select: {
@@ -1024,15 +1187,11 @@ export class AttendanceRepository {
 
     const endDate = new Date(Date.UTC(query.year, query.month, 1));
 
-    return this.prisma.attendance.findMany({
+    return this.prisma.otAttendance.findMany({
       where: {
         attendanceDate: {
           gte: startDate,
           lt: endDate,
-        },
-
-        otHours: {
-          gt: 0,
         },
 
         department: {
@@ -1212,9 +1371,7 @@ export class AttendanceRepository {
     }
 
     if (query.designationId) {
-      where.employee = {
-        designationId: query.designationId,
-      };
+      where.designationId = query.designationId;
     }
 
     return this.prisma.attendance.findMany({
@@ -1249,6 +1406,95 @@ export class AttendanceRepository {
         attendanceDate: true,
         status: true,
         shift: true,
+
+        // Operational designation selected while punching Attendance
+        designation: {
+          select: {
+            id: true,
+            designationName: true,
+          },
+        },
+
+        department: {
+          select: {
+            id: true,
+            departmentName: true,
+          },
+        },
+
+        // Keep Employee master designation temporarily because
+        // existing service code still references it.
+        // We will remove this dependency in the next service change.
+        employee: {
+          select: {
+            designation: {
+              select: {
+                id: true,
+                designationName: true,
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+  async findOtMusterCutFileData(query: MusterCutFileQueryDto) {
+    const startDate = new Date(Date.UTC(query.year, query.month - 1, 1));
+
+    const endDate = new Date(Date.UTC(query.year, query.month, 1));
+
+    const where: Prisma.OtAttendanceWhereInput = {
+      attendanceDate: {
+        gte: startDate,
+        lt: endDate,
+      },
+
+      department: {
+        workTypeId: query.workTypeId,
+
+        workType: {
+          siteId: query.siteId,
+        },
+      },
+    };
+
+    if (query.departmentId) {
+      where.departmentId = query.departmentId;
+    }
+
+    if (query.designationId) {
+      where.designationId = query.designationId;
+    }
+
+    return this.prisma.otAttendance.findMany({
+      where,
+
+      orderBy: [
+        {
+          department: {
+            departmentName: 'asc',
+          },
+        },
+        {
+          designation: {
+            designationName: 'asc',
+          },
+        },
+        {
+          attendanceDate: 'asc',
+        },
+        {
+          shift: 'asc',
+        },
+        {
+          employeeId: 'asc',
+        },
+      ],
+
+      select: {
+        employeeId: true,
+        attendanceDate: true,
+        shift: true,
         otHours: true,
 
         department: {
@@ -1258,14 +1504,10 @@ export class AttendanceRepository {
           },
         },
 
-        employee: {
+        designation: {
           select: {
-            designation: {
-              select: {
-                id: true,
-                designationName: true,
-              },
-            },
+            id: true,
+            designationName: true,
           },
         },
       },
@@ -1300,6 +1542,21 @@ export class AttendanceRepository {
         },
       };
     }
+    if (updateAttendanceDto.departmentId !== undefined) {
+      data.department = {
+        connect: {
+          id: updateAttendanceDto.departmentId,
+        },
+      };
+    }
+
+    if (updateAttendanceDto.designationId !== undefined) {
+      data.designation = {
+        connect: {
+          id: updateAttendanceDto.designationId,
+        },
+      };
+    }
 
     if (updateAttendanceDto.attendanceDate) {
       data.attendanceDate = new Date(updateAttendanceDto.attendanceDate);
@@ -1311,10 +1568,6 @@ export class AttendanceRepository {
 
     if (updateAttendanceDto.shift !== undefined) {
       data.shift = updateAttendanceDto.shift;
-    }
-
-    if (updateAttendanceDto.otHours !== undefined) {
-      data.otHours = updateAttendanceDto.otHours;
     }
 
     if (updateAttendanceDto.remarks !== undefined) {

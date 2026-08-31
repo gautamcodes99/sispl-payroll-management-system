@@ -1,19 +1,20 @@
 import {
-  ArrayNotEmpty,
-  IsArray,
   IsDateString,
   IsEnum,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { AttendanceShift, AttendanceStatus } from '@prisma/client';
+import { AttendanceShift } from '@prisma/client';
 
-export class BulkAttendanceDto {
-  @IsDateString()
-  attendanceDate!: Date;
+export class CreateOtAttendanceDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  employeeId!: number;
 
   @Type(() => Number)
   @IsInt()
@@ -25,20 +26,18 @@ export class BulkAttendanceDto {
   @Min(1)
   designationId!: number;
 
-  @IsEnum(AttendanceStatus)
-  status!: AttendanceStatus;
+  @IsDateString()
+  attendanceDate!: Date;
 
   @IsEnum(AttendanceShift)
   shift!: AttendanceShift;
 
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.01)
+  otHours!: number;
+
   @IsOptional()
   @IsString()
   remarks?: string;
-
-  @IsArray()
-  @ArrayNotEmpty()
-  @Type(() => Number)
-  @IsInt({ each: true })
-  @Min(1, { each: true })
-  employeeIds!: number[];
 }

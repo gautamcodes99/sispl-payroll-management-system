@@ -142,6 +142,9 @@ export class PayrollRepository {
 
   // =========================================================
   // MONTHLY ATTENDANCE
+  //
+  // Daily Attendance is the source of payable-day statuses.
+  // OT hours are stored separately in OtAttendance.
   // =========================================================
 
   async findMonthlyAttendance(
@@ -163,12 +166,55 @@ export class PayrollRepository {
         attendanceDate: true,
         status: true,
         shift: true,
+      },
+
+      orderBy: [
+        {
+          attendanceDate: 'asc',
+        },
+        {
+          shift: 'asc',
+        },
+      ],
+    });
+  }
+
+  // =========================================================
+  // MONTHLY OT ATTENDANCE
+  //
+  // Manual OT source for Payroll.
+  // Every legitimate employee/date/shift OT row is included.
+  // =========================================================
+
+  async findMonthlyOtAttendance(
+    employeeId: number,
+    periodStart: Date,
+    periodEndExclusive: Date,
+  ) {
+    return this.prisma.otAttendance.findMany({
+      where: {
+        employeeId,
+
+        attendanceDate: {
+          gte: periodStart,
+          lt: periodEndExclusive,
+        },
+      },
+
+      select: {
+        attendanceDate: true,
+        shift: true,
         otHours: true,
       },
 
-      orderBy: {
-        attendanceDate: 'asc',
-      },
+      orderBy: [
+        {
+          attendanceDate: 'asc',
+        },
+        {
+          shift: 'asc',
+        },
+      ],
     });
   }
 

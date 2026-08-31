@@ -11,7 +11,6 @@ import { AttendanceQueryDto } from '../dto/attendance-query.dto';
 import { PendingAttendanceQueryDto } from '../dto/pending-attendance-query.dto';
 import { AttendanceDashboardQueryDto } from '../dto/attendance-dashboard-query.dto';
 import { BulkAttendanceDto } from '../dto/bulk-attendance.dto';
-import { BulkOtUpdateDto } from '../dto/bulk-ot-update.dto';
 import { MonthlyAttendanceQueryDto } from '../dto/monthly-attendance-query.dto';
 import { AttendanceReportQueryDto } from '../dto/attendance-report-query.dto';
 import { AttendanceStatus } from '@prisma/client';
@@ -87,11 +86,14 @@ export class AttendanceService {
   private async validateAttendanceContext(
     employeeId: number,
     departmentId: number,
+    designationId: number,
   ) {
-    const [employee, department] = await Promise.all([
+    const [employee, department, designation] = await Promise.all([
       this.attendanceRepository.findEmployeeAttendanceContext(employeeId),
 
       this.attendanceRepository.findDepartmentAttendanceContext(departmentId),
+
+      this.attendanceRepository.findDesignationAttendanceContext(designationId),
     ]);
 
     if (!employee) {
@@ -101,6 +103,18 @@ export class AttendanceService {
     if (!department) {
       throw new NotFoundException(
         `Department with ID ${departmentId} not found.`,
+      );
+    }
+
+    if (!designation) {
+      throw new NotFoundException(
+        `Designation with ID ${designationId} not found.`,
+      );
+    }
+
+    if (designation.status !== 'ACTIVE') {
+      throw new BadRequestException(
+        `Designation with ID ${designationId} is not active.`,
       );
     }
   }
@@ -118,6 +132,7 @@ export class AttendanceService {
   private async validateBulkAttendanceContext(
     employeeIds: number[],
     departmentId: number,
+    designationId: number,
   ) {
     const department =
       await this.attendanceRepository.findDepartmentAttendanceContext(
@@ -127,6 +142,22 @@ export class AttendanceService {
     if (!department) {
       throw new NotFoundException(
         `Department with ID ${departmentId} not found.`,
+      );
+    }
+    const designation =
+      await this.attendanceRepository.findDesignationAttendanceContext(
+        designationId,
+      );
+
+    if (!designation) {
+      throw new NotFoundException(
+        `Designation with ID ${designationId} not found.`,
+      );
+    }
+
+    if (designation.status !== 'ACTIVE') {
+      throw new BadRequestException(
+        `Designation with ID ${designationId} is not active.`,
       );
     }
 
@@ -160,6 +191,7 @@ export class AttendanceService {
     await this.validateAttendanceContext(
       createAttendanceDto.employeeId,
       createAttendanceDto.departmentId,
+      createAttendanceDto.designationId,
     );
 
     const attendance =
@@ -238,6 +270,7 @@ export class AttendanceService {
     await this.validateBulkAttendanceContext(
       bulkAttendanceDto.employeeIds,
       bulkAttendanceDto.departmentId,
+      bulkAttendanceDto.designationId,
     );
 
     const existingAttendances =
@@ -274,30 +307,6 @@ export class AttendanceService {
 
       data: {
         processed: attendances.length,
-      },
-    };
-  }
-
-  // =========================================================
-  // BULK OT UPDATE
-  // =========================================================
-
-  async bulkUpdateOt(bulkOtUpdateDto: BulkOtUpdateDto) {
-    const attendanceDate = new Date(bulkOtUpdateDto.attendanceDate);
-
-    await this.validateAttendanceMonthUnlocked(attendanceDate);
-
-    const results =
-      await this.attendanceRepository.bulkUpdateOt(bulkOtUpdateDto);
-
-    const updated = results.reduce((total, result) => total + result.count, 0);
-
-    return {
-      success: true,
-      message: 'OT hours updated successfully.',
-
-      data: {
-        processed: updated,
       },
     };
   }
@@ -508,8 +517,8 @@ export class AttendanceService {
           dateOfBirth: employee.dateOfBirth,
           gender: employee.gender,
           joiningDate: employee.joiningDate,
-          designationId: employee.designation.id,
-          designationName: employee.designation.designationName,
+          designationId: attendance.designation.id,
+          designationName: attendance.designation.designationName,
           attendanceByDay: new Map(),
         };
 
@@ -676,7 +685,7 @@ export class AttendanceService {
   // Uses the same monthly Attendance dataset as Muster.
   //
   // OT is NEVER calculated from working hours.
-  // It comes directly from manually entered Attendance.otHours.
+  // It comes directly from manually entered Daily OT Attendance.
   //
   // Output:
   //
@@ -730,11 +739,11 @@ export class AttendanceService {
     );
 
     // -------------------------------------------------------
-    // RAW ATTENDANCE
+    // RAW OT ATTENDANCE
     // -------------------------------------------------------
 
-    const attendances =
-      await this.attendanceRepository.findMonthlyAttendanceReportData(query);
+    const otAttendances =
+      await this.attendanceRepository.findMonthlyOtAttendanceReportData(query);
 
     // -------------------------------------------------------
     // EMPLOYEE GROUPING
@@ -761,7 +770,7 @@ export class AttendanceService {
 
     const employeeMap = new Map<number, OtMusterEmployeeAccumulator>();
 
-    for (const attendance of attendances) {
+    for (const attendance of otAttendances) {
       const employee = attendance.employee;
 
       let accumulator = employeeMap.get(employee.id);
@@ -773,8 +782,8 @@ export class AttendanceService {
           dateOfBirth: employee.dateOfBirth,
           gender: employee.gender,
           joiningDate: employee.joiningDate,
-          designationId: employee.designation.id,
-          designationName: employee.designation.designationName,
+          designationId: attendance.designation.id,
+          designationName: attendance.designation.designationName,
           otByDay: new Map<number, number>(),
         };
 
@@ -933,7 +942,7 @@ export class AttendanceService {
   // P  = 1
   // HD = 0.5
   //
-  // OT is taken directly from Attendance.otHours.
+  // OT is taken directly from OtAttendance.otHours.
   // No automatic working-hour calculation.
   // =========================================================
 
@@ -979,8 +988,10 @@ export class AttendanceService {
     // RAW ATTENDANCE
     // -------------------------------------------------------
 
-    const attendances =
-      await this.attendanceRepository.findMonthlyAttendanceReportData(query);
+    const [attendances, otAttendances] = await Promise.all([
+      this.attendanceRepository.findMonthlyAttendanceReportData(query),
+      this.attendanceRepository.findMonthlyOtAttendanceReportData(query),
+    ]);
 
     // -------------------------------------------------------
     // EMPLOYEE GROUPING
@@ -1013,8 +1024,8 @@ export class AttendanceService {
           dateOfBirth: employee.dateOfBirth,
           gender: employee.gender,
           joiningDate: employee.joiningDate,
-          designationId: employee.designation.id,
-          designationName: employee.designation.designationName,
+          designationId: attendance.designation.id,
+          designationName: attendance.designation.designationName,
           attendanceByDay: new Map(),
           otByDay: new Map<number, number>(),
         };
@@ -1040,21 +1051,48 @@ export class AttendanceService {
 
         accumulator.attendanceByDay.set(day, dayEntries);
       }
+    }
+    // -------------------------------------------------------
+    // RAW DAILY OT ATTENDANCE
+    //
+    // OT is stored separately from Daily Attendance.
+    // Multiple OT shifts for the same employee/date are summed.
+    // -------------------------------------------------------
 
-      // -----------------------------------------------------
-      // MANUAL OT
-      //
-      // If no Shift filter is supplied and multiple shift
-      // records exist for the same employee/date, OT is summed.
-      // -----------------------------------------------------
+    for (const otAttendance of otAttendances) {
+      const employee = otAttendance.employee;
 
-      const otHours = Number(attendance.otHours);
+      let accumulator = employeeMap.get(employee.id);
 
-      if (Number.isFinite(otHours) && otHours > 0) {
-        const existingOtHours = accumulator.otByDay.get(day) ?? 0;
+      if (!accumulator) {
+        accumulator = {
+          employeeId: employee.id,
+          employeeName: `${employee.firstName} ${employee.lastName}`.trim(),
+          dateOfBirth: employee.dateOfBirth,
+          gender: employee.gender,
+          joiningDate: employee.joiningDate,
 
-        accumulator.otByDay.set(day, existingOtHours + otHours);
+          designationId: otAttendance.designation.id,
+          designationName: otAttendance.designation.designationName,
+
+          attendanceByDay: new Map(),
+          otByDay: new Map<number, number>(),
+        };
+
+        employeeMap.set(employee.id, accumulator);
       }
+
+      const day = otAttendance.attendanceDate.getUTCDate();
+
+      const otHours = Number(otAttendance.otHours);
+
+      if (!Number.isFinite(otHours) || otHours <= 0) {
+        continue;
+      }
+
+      const existingOtHours = accumulator.otByDay.get(day) ?? 0;
+
+      accumulator.otByDay.set(day, existingOtHours + otHours);
     }
 
     // -------------------------------------------------------
@@ -1544,7 +1582,7 @@ export class AttendanceService {
         continue;
       }
 
-      const designation = attendance.employee.designation;
+      const designation = attendance.designation;
 
       const key = `${attendance.department.id}:${designation.id}`;
 
@@ -1763,7 +1801,7 @@ export class AttendanceService {
   //
   // Sum(employee counts across month) * HOURS
   //
-  // OT is taken ONLY from manually entered Attendance.otHours.
+  // OT is taken ONLY from manually entered OtAttendance.otHours.
   // =========================================================
 
   async getOtMusterCutFileReport(query: MusterCutFileQueryDto) {
@@ -1816,11 +1854,11 @@ export class AttendanceService {
     ).getUTCDate();
 
     // -------------------------------------------------------
-    // RAW ATTENDANCE
+    // RAW DAILY OT ATTENDANCE
     // -------------------------------------------------------
 
     const attendances =
-      await this.attendanceRepository.findMusterCutFileData(query);
+      await this.attendanceRepository.findOtMusterCutFileData(query);
 
     // -------------------------------------------------------
     // STEP 1
@@ -1861,7 +1899,7 @@ export class AttendanceService {
         continue;
       }
 
-      const designation = attendance.employee.designation;
+      const designation = attendance.designation;
 
       const day = attendance.attendanceDate.getUTCDate();
 
@@ -2221,6 +2259,26 @@ export class AttendanceService {
         await this.validateAttendanceMonthUnlocked(targetAttendanceDate);
       }
     }
+    const targetEmployeeId =
+      updateAttendanceDto.employeeId ?? attendance.employee.id;
+
+    const targetDepartmentId =
+      updateAttendanceDto.departmentId ?? attendance.department?.id;
+
+    const targetDesignationId =
+      updateAttendanceDto.designationId ?? attendance.designation.id;
+
+    if (!targetDepartmentId) {
+      throw new BadRequestException(
+        'Attendance must have a Department before it can be updated.',
+      );
+    }
+
+    await this.validateAttendanceContext(
+      targetEmployeeId,
+      targetDepartmentId,
+      targetDesignationId,
+    );
 
     const updatedAttendance = await this.attendanceRepository.updateAttendance(
       id,

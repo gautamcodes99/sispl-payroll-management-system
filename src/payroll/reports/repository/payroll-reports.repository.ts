@@ -114,7 +114,6 @@ export class PayrollReportsRepository {
         attendanceDate: true,
         status: true,
         shift: true,
-        otHours: true,
 
         employee: {
           select: {

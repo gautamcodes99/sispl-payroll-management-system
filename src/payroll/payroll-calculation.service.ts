@@ -45,6 +45,8 @@ export class PayrollCalculationService {
   private calculateAttendance(
     attendances: {
       status: string;
+    }[],
+    otAttendances: {
       otHours: unknown;
     }[],
   ) {
@@ -52,7 +54,10 @@ export class PayrollCalculationService {
     let halfDays = 0;
     let paidHolidays = 0;
     let payableDays = 0;
-    let otHours = 0;
+
+    // =======================================================
+    // PAYABLE ATTENDANCE
+    // =======================================================
 
     for (const attendance of attendances) {
       switch (attendance.status) {
@@ -71,9 +76,18 @@ export class PayrollCalculationService {
           payableDays += 1;
           break;
       }
-
-      otHours += Number(attendance.otHours);
     }
+
+    // =======================================================
+    // MANUAL OT
+    //
+    // OT is sourced only from Daily OT Attendance.
+    // Multiple legitimate shifts are summed independently.
+    // =======================================================
+
+    const otHours = otAttendances.reduce((total, otAttendance) => {
+      return total + Number(otAttendance.otHours);
+    }, 0);
 
     return {
       presentDays,
@@ -161,9 +175,15 @@ export class PayrollCalculationService {
       );
     }
 
-    const [attendances, variableAllowance, manualDeduction] = await Promise.all(
-      [
+    const [attendances, otAttendances, variableAllowance, manualDeduction] =
+      await Promise.all([
         this.payrollRepository.findMonthlyAttendance(
+          employeeId,
+          salaryMonth,
+          periodEndExclusive,
+        ),
+
+        this.payrollRepository.findMonthlyOtAttendance(
           employeeId,
           salaryMonth,
           periodEndExclusive,
@@ -172,14 +192,13 @@ export class PayrollCalculationService {
         this.payrollRepository.findVariableAllowance(employeeId, salaryMonth),
 
         this.payrollRepository.findManualDeduction(employeeId, salaryMonth),
-      ],
-    );
+      ]);
 
     // =======================================================
     // ATTENDANCE
     // =======================================================
 
-    const attendance = this.calculateAttendance(attendances);
+    const attendance = this.calculateAttendance(attendances, otAttendances);
 
     // =======================================================
     // WAGE MASTER VALUES
