@@ -503,12 +503,14 @@ export class AttendanceService {
       attendanceByDay: Map<number, Array<{ shift: string; code: string }>>;
     };
 
-    const employeeMap = new Map<number, MusterEmployeeAccumulator>();
+    const employeeMap = new Map<string, MusterEmployeeAccumulator>();
 
     for (const attendance of attendances) {
       const employee = attendance.employee;
 
-      let accumulator = employeeMap.get(employee.id);
+      const employeeDesignationKey = `${employee.id}:${attendance.designation.id}`;
+
+      let accumulator = employeeMap.get(employeeDesignationKey);
 
       if (!accumulator) {
         accumulator = {
@@ -522,7 +524,7 @@ export class AttendanceService {
           attendanceByDay: new Map(),
         };
 
-        employeeMap.set(employee.id, accumulator);
+        employeeMap.set(employeeDesignationKey, accumulator);
       }
 
       const day = attendance.attendanceDate.getUTCDate();
@@ -768,12 +770,14 @@ export class AttendanceService {
       otByDay: Map<number, number>;
     };
 
-    const employeeMap = new Map<number, OtMusterEmployeeAccumulator>();
+    const employeeMap = new Map<string, OtMusterEmployeeAccumulator>();
 
     for (const attendance of otAttendances) {
       const employee = attendance.employee;
 
-      let accumulator = employeeMap.get(employee.id);
+      const employeeDesignationKey = `${employee.id}:${attendance.designation.id}`;
+
+      let accumulator = employeeMap.get(employeeDesignationKey);
 
       if (!accumulator) {
         accumulator = {
@@ -787,7 +791,7 @@ export class AttendanceService {
           otByDay: new Map<number, number>(),
         };
 
-        employeeMap.set(employee.id, accumulator);
+        employeeMap.set(employeeDesignationKey, accumulator);
       }
 
       const day = attendance.attendanceDate.getUTCDate();
@@ -1010,12 +1014,14 @@ export class AttendanceService {
       otByDay: Map<number, number>;
     };
 
-    const employeeMap = new Map<number, MusterWithOtEmployeeAccumulator>();
+    const employeeMap = new Map<string, MusterWithOtEmployeeAccumulator>();
 
     for (const attendance of attendances) {
       const employee = attendance.employee;
 
-      let accumulator = employeeMap.get(employee.id);
+      const employeeDesignationKey = `${employee.id}:${attendance.designation.id}`;
+
+      let accumulator = employeeMap.get(employeeDesignationKey);
 
       if (!accumulator) {
         accumulator = {
@@ -1030,7 +1036,7 @@ export class AttendanceService {
           otByDay: new Map<number, number>(),
         };
 
-        employeeMap.set(employee.id, accumulator);
+        employeeMap.set(employeeDesignationKey, accumulator);
       }
 
       const day = attendance.attendanceDate.getUTCDate();
@@ -1062,7 +1068,9 @@ export class AttendanceService {
     for (const otAttendance of otAttendances) {
       const employee = otAttendance.employee;
 
-      let accumulator = employeeMap.get(employee.id);
+      const employeeDesignationKey = `${employee.id}:${otAttendance.designation.id}`;
+
+      let accumulator = employeeMap.get(employeeDesignationKey);
 
       if (!accumulator) {
         accumulator = {
@@ -1079,7 +1087,7 @@ export class AttendanceService {
           otByDay: new Map<number, number>(),
         };
 
-        employeeMap.set(employee.id, accumulator);
+        employeeMap.set(employeeDesignationKey, accumulator);
       }
 
       const day = otAttendance.attendanceDate.getUTCDate();
