@@ -107,9 +107,49 @@ export class EmployeeService {
       throw new NotFoundException('Employee not found.');
     }
 
+    const gender = (updateEmployeeProfileDto.gender ?? employee.gender ?? '')
+      .trim()
+      .toUpperCase();
+
+    const maritalStatus =
+      updateEmployeeProfileDto.maritalStatus ?? employee.maritalStatus ?? null;
+
+    const isMarriedFemale = gender === 'FEMALE' && maritalStatus === 'MARRIED';
+
+    const normalizedProfile: UpdateEmployeeProfileDto = {
+      ...updateEmployeeProfileDto,
+    };
+
+    if (isMarriedFemale) {
+      const husbandName =
+        updateEmployeeProfileDto.husbandName !== undefined
+          ? updateEmployeeProfileDto.husbandName?.trim()
+          : employee.husbandName?.trim();
+
+      if (!husbandName) {
+        throw new BadRequestException(
+          'Husband name is required for a married female employee.',
+        );
+      }
+
+      normalizedProfile.husbandName = husbandName;
+      normalizedProfile.fatherName = null;
+    } else {
+      /*
+       * Husband Name is applicable only to a married female employee.
+       * Clear any previous value if Gender / Marital Status changes.
+       */
+      normalizedProfile.husbandName = null;
+
+      if (updateEmployeeProfileDto.fatherName !== undefined) {
+        normalizedProfile.fatherName =
+          updateEmployeeProfileDto.fatherName?.trim() || null;
+      }
+    }
+
     const updatedEmployee = await this.employeeRepository.updateEmployeeProfile(
       id,
-      updateEmployeeProfileDto,
+      normalizedProfile,
     );
 
     return {
@@ -488,6 +528,13 @@ export class EmployeeService {
       const lastName = row.lastName?.trim();
       const phone = row.phone?.trim();
       const designationName = row.designation?.trim();
+      const gender = row.gender?.trim().toUpperCase();
+      const maritalStatus = row.maritalStatus?.trim().toUpperCase();
+      const fatherName = row.fatherName?.trim();
+      const husbandName = row.husbandName?.trim();
+
+      const isMarriedFemale =
+        gender === 'FEMALE' && maritalStatus === 'MARRIED';
 
       if (!Number.isInteger(row.rowNumber) || row.rowNumber < 2) {
         this.addImportError(
@@ -526,6 +573,19 @@ export class EmployeeService {
           'Phone Number',
           row.phone,
           'Phone Number is required.',
+        );
+      }
+      // -----------------------------------------------------
+      // MARITAL DETAILS
+      // -----------------------------------------------------
+
+      if (isMarriedFemale && !husbandName) {
+        this.addImportError(
+          errors,
+          row,
+          'Husband Name',
+          row.husbandName,
+          'Husband Name is required for a married female employee.',
         );
       }
 
@@ -702,6 +762,16 @@ export class EmployeeService {
             email: row.email?.trim() || undefined,
             designation: designationName || '',
             basicSalary,
+
+            gender: gender || undefined,
+            maritalStatus:
+              maritalStatus === 'MARRIED' || maritalStatus === 'UNMARRIED'
+                ? maritalStatus
+                : undefined,
+
+            fatherName: isMarriedFemale ? undefined : fatherName || undefined,
+
+            husbandName: isMarriedFemale ? husbandName || undefined : undefined,
           },
           designationId: designation.id,
           joiningDate,

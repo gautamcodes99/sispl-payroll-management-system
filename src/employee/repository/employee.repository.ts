@@ -51,6 +51,8 @@ export class EmployeeRepository {
     firstName: true,
     lastName: true,
     fatherName: true,
+    maritalStatus: true,
+    husbandName: true,
     dateOfBirth: true,
     gender: true,
     phone: true,
@@ -260,8 +262,8 @@ export class EmployeeRepository {
       ...rest,
     };
 
-    if (dateOfBirth) {
-      data.dateOfBirth = new Date(dateOfBirth);
+    if (dateOfBirth !== undefined) {
+      data.dateOfBirth = dateOfBirth ? new Date(dateOfBirth) : null;
     }
 
     return this.prisma.employee.update({
@@ -461,6 +463,8 @@ export class EmployeeRepository {
         firstName: true,
         lastName: true,
         fatherName: true,
+        maritalStatus: true,
+        husbandName: true,
         dateOfBirth: true,
         gender: true,
         phone: true,
@@ -597,6 +601,8 @@ export class EmployeeRepository {
               lastName: row.lastName.trim(),
 
               fatherName: row.fatherName?.trim() || null,
+              maritalStatus: row.maritalStatus ?? null,
+              husbandName: row.husbandName?.trim() || null,
               dateOfBirth,
               gender: row.gender?.trim() || null,
 

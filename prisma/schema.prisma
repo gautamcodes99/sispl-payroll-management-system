@@ -27,6 +27,8 @@ model Employee {
   dateOfBirth         DateTime?
   esicNumber          String?
   fatherName          String?
+  maritalStatus       String?
+  husbandName         String?
   gender              String?
   ifscCode            String?
   nomineeMobile       String?

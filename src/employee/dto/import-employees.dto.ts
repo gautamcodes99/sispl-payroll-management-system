@@ -27,6 +27,14 @@ export class ImportEmployeeRowDto {
   fatherName?: string;
 
   @IsOptional()
+  @IsIn(['MARRIED', 'UNMARRIED'])
+  maritalStatus?: 'MARRIED' | 'UNMARRIED';
+
+  @IsOptional()
+  @IsString()
+  husbandName?: string;
+
+  @IsOptional()
   @IsString()
   dateOfBirth?: string;
 
