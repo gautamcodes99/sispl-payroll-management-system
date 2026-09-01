@@ -896,6 +896,25 @@ export class AttendanceRepository {
     };
   }
   // =========================================================
+  // ATTENDANCE REPORT SITE CONTEXT
+  //
+  // Used by Attendance reports when Site is supplied as an
+  // optional report filter.
+  // =========================================================
+
+  async findAttendanceReportSiteContext(siteId: number) {
+    return this.prisma.site.findUnique({
+      where: {
+        id: siteId,
+      },
+
+      select: {
+        id: true,
+        siteName: true,
+      },
+    });
+  }
+  // =========================================================
   // ATTENDANCE REPORT ORGANISATION CONTEXT
   //
   // Used by report Service validation and dynamic headers.
@@ -961,17 +980,25 @@ export class AttendanceRepository {
         gte: startDate,
         lt: endDate,
       },
-
-      departmentId: query.departmentId,
-
-      department: {
-        workTypeId: query.workTypeId,
-
-        workType: {
-          siteId: query.siteId,
-        },
-      },
     };
+
+    if (query.departmentId) {
+      where.departmentId = query.departmentId;
+    }
+
+    if (query.workTypeId || query.siteId) {
+      where.department = {
+        ...(query.workTypeId ? { workTypeId: query.workTypeId } : {}),
+
+        ...(query.siteId
+          ? {
+              workType: {
+                siteId: query.siteId,
+              },
+            }
+          : {}),
+      };
+    }
 
     if (query.shift) {
       where.shift = query.shift;
@@ -1062,17 +1089,25 @@ export class AttendanceRepository {
         gte: startDate,
         lt: endDate,
       },
-
-      departmentId: query.departmentId,
-
-      department: {
-        workTypeId: query.workTypeId,
-
-        workType: {
-          siteId: query.siteId,
-        },
-      },
     };
+
+    if (query.departmentId) {
+      where.departmentId = query.departmentId;
+    }
+
+    if (query.workTypeId || query.siteId) {
+      where.department = {
+        ...(query.workTypeId ? { workTypeId: query.workTypeId } : {}),
+
+        ...(query.siteId
+          ? {
+              workType: {
+                siteId: query.siteId,
+              },
+            }
+          : {}),
+      };
+    }
 
     if (query.shift) {
       where.shift = query.shift;
@@ -1356,18 +1391,28 @@ export class AttendanceRepository {
         gte: startDate,
         lt: endDate,
       },
-
-      department: {
-        workTypeId: query.workTypeId,
-
-        workType: {
-          siteId: query.siteId,
-        },
-      },
     };
 
     if (query.departmentId) {
       where.departmentId = query.departmentId;
+    }
+
+    if (query.workTypeId || query.siteId) {
+      where.department = {
+        ...(query.workTypeId ? { workTypeId: query.workTypeId } : {}),
+
+        ...(query.siteId
+          ? {
+              workType: {
+                siteId: query.siteId,
+              },
+            }
+          : {}),
+      };
+    }
+
+    if (query.shift) {
+      where.shift = query.shift;
     }
 
     if (query.designationId) {
@@ -1448,18 +1493,28 @@ export class AttendanceRepository {
         gte: startDate,
         lt: endDate,
       },
-
-      department: {
-        workTypeId: query.workTypeId,
-
-        workType: {
-          siteId: query.siteId,
-        },
-      },
     };
 
     if (query.departmentId) {
       where.departmentId = query.departmentId;
+    }
+
+    if (query.workTypeId || query.siteId) {
+      where.department = {
+        ...(query.workTypeId ? { workTypeId: query.workTypeId } : {}),
+
+        ...(query.siteId
+          ? {
+              workType: {
+                siteId: query.siteId,
+              },
+            }
+          : {}),
+      };
+    }
+
+    if (query.shift) {
+      where.shift = query.shift;
     }
 
     if (query.designationId) {

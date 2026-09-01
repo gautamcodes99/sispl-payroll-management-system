@@ -412,6 +412,104 @@ export class AttendanceService {
   }
 
   // =========================================================
+  // ATTENDANCE REPORT OPTIONAL ORGANISATION CONTEXT
+  //
+  // Site, Work Type and Department are independent optional
+  // report filters.
+  //
+  // When multiple filters are supplied, their organisation
+  // hierarchy must be consistent.
+  //
+  // This helper is used only by:
+  // - Muster
+  // - OT Muster
+  // - Muster With OT
+  // - Muster Cut File
+  // - OT Muster Cut File
+  //
+  // Form XXIII keeps its existing rules.
+  // =========================================================
+
+  private async resolveAttendanceReportContext(query: {
+    siteId?: number;
+    workTypeId?: number;
+    departmentId?: number;
+  }) {
+    const [site, workType, department] = await Promise.all([
+      query.siteId
+        ? this.attendanceRepository.findAttendanceReportSiteContext(
+            query.siteId,
+          )
+        : Promise.resolve(null),
+
+      query.workTypeId
+        ? this.attendanceRepository.findMusterCutFileWorkTypeContext(
+            query.workTypeId,
+          )
+        : Promise.resolve(null),
+
+      query.departmentId
+        ? this.attendanceRepository.findAttendanceReportDepartmentContext(
+            query.departmentId,
+          )
+        : Promise.resolve(null),
+    ]);
+
+    if (query.siteId && !site) {
+      throw new NotFoundException('Site not found.');
+    }
+
+    if (query.workTypeId && !workType) {
+      throw new NotFoundException('Work Type not found.');
+    }
+
+    if (query.departmentId && !department) {
+      throw new NotFoundException('Department not found.');
+    }
+
+    if (site && workType && workType.siteId !== site.id) {
+      throw new BadRequestException(
+        'Selected Work Type does not belong to the selected Site.',
+      );
+    }
+
+    if (workType && department && department.workTypeId !== workType.id) {
+      throw new BadRequestException(
+        'Selected Department does not belong to the selected Work Type.',
+      );
+    }
+
+    if (site && department && department.workType.siteId !== site.id) {
+      throw new BadRequestException(
+        'Selected Department does not belong to the selected Site.',
+      );
+    }
+
+    return {
+      site: site
+        ? {
+            id: site.id,
+            siteName: site.siteName,
+          }
+        : null,
+
+      workType: workType
+        ? {
+            id: workType.id,
+            workTypeName: workType.workTypeName,
+          }
+        : null,
+
+      department: department
+        ? {
+            id: department.id,
+            departmentName: department.departmentName,
+          }
+        : null,
+    };
+  }
+
+  // =========================================================
   // MUSTER REPORT
   //
   // Output:
@@ -448,26 +546,7 @@ export class AttendanceService {
     // ORGANISATION CONTEXT VALIDATION
     // -------------------------------------------------------
 
-    const department =
-      await this.attendanceRepository.findAttendanceReportDepartmentContext(
-        query.departmentId,
-      );
-
-    if (!department) {
-      throw new NotFoundException('Department not found.');
-    }
-
-    if (department.workTypeId !== query.workTypeId) {
-      throw new BadRequestException(
-        'Selected Department does not belong to the selected Work Type.',
-      );
-    }
-
-    if (department.workType.siteId !== query.siteId) {
-      throw new BadRequestException(
-        'Selected Work Type does not belong to the selected Site.',
-      );
-    }
+    const context = await this.resolveAttendanceReportContext(query);
 
     // -------------------------------------------------------
     // MONTH
@@ -653,20 +732,11 @@ export class AttendanceService {
           month: query.month,
           daysInMonth,
 
-          site: {
-            id: department.workType.site.id,
-            siteName: department.workType.site.siteName,
-          },
+          site: context.site,
 
-          workType: {
-            id: department.workType.id,
-            workTypeName: department.workType.workTypeName,
-          },
+          workType: context.workType,
 
-          department: {
-            id: department.id,
-            departmentName: department.departmentName,
-          },
+          department: context.department,
 
           shift: query.shift ?? null,
         },
@@ -707,26 +777,7 @@ export class AttendanceService {
     // ORGANISATION CONTEXT VALIDATION
     // -------------------------------------------------------
 
-    const department =
-      await this.attendanceRepository.findAttendanceReportDepartmentContext(
-        query.departmentId,
-      );
-
-    if (!department) {
-      throw new NotFoundException('Department not found.');
-    }
-
-    if (department.workTypeId !== query.workTypeId) {
-      throw new BadRequestException(
-        'Selected Department does not belong to the selected Work Type.',
-      );
-    }
-
-    if (department.workType.siteId !== query.siteId) {
-      throw new BadRequestException(
-        'Selected Work Type does not belong to the selected Site.',
-      );
-    }
+    const context = await this.resolveAttendanceReportContext(query);
 
     // -------------------------------------------------------
     // MONTH
@@ -899,20 +950,11 @@ export class AttendanceService {
           month: query.month,
           daysInMonth,
 
-          site: {
-            id: department.workType.site.id,
-            siteName: department.workType.site.siteName,
-          },
+          site: context.site,
 
-          workType: {
-            id: department.workType.id,
-            workTypeName: department.workType.workTypeName,
-          },
+          workType: context.workType,
 
-          department: {
-            id: department.id,
-            departmentName: department.departmentName,
-          },
+          department: context.department,
 
           shift: query.shift ?? null,
         },
@@ -955,26 +997,7 @@ export class AttendanceService {
     // ORGANISATION CONTEXT VALIDATION
     // -------------------------------------------------------
 
-    const department =
-      await this.attendanceRepository.findAttendanceReportDepartmentContext(
-        query.departmentId,
-      );
-
-    if (!department) {
-      throw new NotFoundException('Department not found.');
-    }
-
-    if (department.workTypeId !== query.workTypeId) {
-      throw new BadRequestException(
-        'Selected Department does not belong to the selected Work Type.',
-      );
-    }
-
-    if (department.workType.siteId !== query.siteId) {
-      throw new BadRequestException(
-        'Selected Work Type does not belong to the selected Site.',
-      );
-    }
+    const context = await this.resolveAttendanceReportContext(query);
 
     // -------------------------------------------------------
     // MONTH
@@ -1226,20 +1249,11 @@ export class AttendanceService {
           month: query.month,
           daysInMonth,
 
-          site: {
-            id: department.workType.site.id,
-            siteName: department.workType.site.siteName,
-          },
+          site: context.site,
 
-          workType: {
-            id: department.workType.id,
-            workTypeName: department.workType.workTypeName,
-          },
+          workType: context.workType,
 
-          department: {
-            id: department.id,
-            departmentName: department.departmentName,
-          },
+          department: context.department,
 
           shift: query.shift ?? null,
         },
@@ -1487,44 +1501,10 @@ export class AttendanceService {
 
   async getMusterCutFileReport(query: MusterCutFileQueryDto) {
     // -------------------------------------------------------
-    // WORK TYPE / SITE VALIDATION
+    // OPTIONAL ORGANISATION CONTEXT
     // -------------------------------------------------------
 
-    const workType =
-      await this.attendanceRepository.findMusterCutFileWorkTypeContext(
-        query.workTypeId,
-      );
-
-    if (!workType) {
-      throw new NotFoundException('Work Type not found.');
-    }
-
-    if (workType.siteId !== query.siteId) {
-      throw new BadRequestException(
-        'Selected Work Type does not belong to the selected Site.',
-      );
-    }
-
-    // -------------------------------------------------------
-    // OPTIONAL DEPARTMENT VALIDATION
-    // -------------------------------------------------------
-
-    if (query.departmentId) {
-      const department =
-        await this.attendanceRepository.findMusterCutFileDepartmentContext(
-          query.departmentId,
-        );
-
-      if (!department) {
-        throw new NotFoundException('Department not found.');
-      }
-
-      if (department.workTypeId !== query.workTypeId) {
-        throw new BadRequestException(
-          'Selected Department does not belong to the selected Work Type.',
-        );
-      }
-    }
+    const context = await this.resolveAttendanceReportContext(query);
 
     // -------------------------------------------------------
     // MONTH
@@ -1753,20 +1733,16 @@ export class AttendanceService {
           month: query.month,
           daysInMonth,
 
-          site: {
-            id: workType.site.id,
-            siteName: workType.site.siteName,
-          },
+          site: context.site,
 
-          workType: {
-            id: workType.id,
-            workTypeName: workType.workTypeName,
-          },
+          workType: context.workType,
 
           filters: {
             departmentId: query.departmentId ?? null,
 
             designationId: query.designationId ?? null,
+
+            shift: query.shift ?? null,
           },
 
           print: {
@@ -1814,44 +1790,10 @@ export class AttendanceService {
 
   async getOtMusterCutFileReport(query: MusterCutFileQueryDto) {
     // -------------------------------------------------------
-    // WORK TYPE / SITE VALIDATION
+    // OPTIONAL ORGANISATION CONTEXT
     // -------------------------------------------------------
 
-    const workType =
-      await this.attendanceRepository.findMusterCutFileWorkTypeContext(
-        query.workTypeId,
-      );
-
-    if (!workType) {
-      throw new NotFoundException('Work Type not found.');
-    }
-
-    if (workType.siteId !== query.siteId) {
-      throw new BadRequestException(
-        'Selected Work Type does not belong to the selected Site.',
-      );
-    }
-
-    // -------------------------------------------------------
-    // OPTIONAL DEPARTMENT VALIDATION
-    // -------------------------------------------------------
-
-    if (query.departmentId) {
-      const department =
-        await this.attendanceRepository.findMusterCutFileDepartmentContext(
-          query.departmentId,
-        );
-
-      if (!department) {
-        throw new NotFoundException('Department not found.');
-      }
-
-      if (department.workTypeId !== query.workTypeId) {
-        throw new BadRequestException(
-          'Selected Department does not belong to the selected Work Type.',
-        );
-      }
-    }
+    const context = await this.resolveAttendanceReportContext(query);
 
     // -------------------------------------------------------
     // MONTH
@@ -2160,20 +2102,16 @@ export class AttendanceService {
           month: query.month,
           daysInMonth,
 
-          site: {
-            id: workType.site.id,
-            siteName: workType.site.siteName,
-          },
+          site: context.site,
 
-          workType: {
-            id: workType.id,
-            workTypeName: workType.workTypeName,
-          },
+          workType: context.workType,
 
           filters: {
             departmentId: query.departmentId ?? null,
 
             designationId: query.designationId ?? null,
+
+            shift: query.shift ?? null,
           },
 
           hourSlabs: Array.from(allHourSlabs).sort((a, b) => a - b),

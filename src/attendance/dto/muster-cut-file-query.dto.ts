@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import { AttendanceShift } from '@prisma/client';
+import { IsEnum, IsInt, IsOptional, Max, Min } from 'class-validator';
 
 export class MusterCutFileQueryDto {
   @Type(() => Number)
@@ -14,25 +15,27 @@ export class MusterCutFileQueryDto {
   @Max(12)
   month!: number;
 
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  siteId!: number;
+  siteId?: number;
 
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  workTypeId!: number;
+  workTypeId?: number;
 
-  /*
-   * Optional because the approved Cut File can contain
-   * multiple Departments in the same report body.
-   */
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   departmentId?: number;
+
+  @IsOptional()
+  @IsEnum(AttendanceShift)
+  shift?: AttendanceShift;
 
   /*
    * Optional web/report filter.

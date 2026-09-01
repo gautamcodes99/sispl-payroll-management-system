@@ -15,20 +15,23 @@ export class AttendanceReportQueryDto {
   @Max(12)
   month!: number;
 
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  siteId!: number;
+  siteId?: number;
 
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  workTypeId!: number;
+  workTypeId?: number;
 
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  departmentId!: number;
+  departmentId?: number;
 
   @IsOptional()
   @IsEnum(AttendanceShift)
