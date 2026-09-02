@@ -54,6 +54,14 @@ export class PayrollReportsRepository {
           orderBy: {
             employeeId: 'asc',
           },
+
+          include: {
+            employee: {
+              select: {
+                joiningDate: true,
+              },
+            },
+          },
         },
       },
     });
@@ -447,6 +455,41 @@ export class PayrollReportsRepository {
             },
           },
         },
+      },
+    });
+  }
+  // =========================================================
+  // FORM XVI - EMPLOYEE FAMILY DETAILS
+  //
+  // Used only for the statutory Father's / Husband's Name
+  // column.
+  //
+  // Payroll monetary/designation values continue to come
+  // from PayrollEmployeeSnapshot.
+  // =========================================================
+
+  async findDeductionReportEmployeeFamilyDetails(employeeIds: number[]) {
+    if (employeeIds.length === 0) {
+      return [];
+    }
+
+    return this.prisma.employee.findMany({
+      where: {
+        id: {
+          in: employeeIds,
+        },
+      },
+
+      orderBy: {
+        id: 'asc',
+      },
+
+      select: {
+        id: true,
+        gender: true,
+        maritalStatus: true,
+        fatherName: true,
+        husbandName: true,
       },
     });
   }

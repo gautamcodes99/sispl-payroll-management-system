@@ -14,6 +14,26 @@ export class ManualDeductionRepository {
     });
   }
 
+  async findEmployeesByIds(employeeIds: number[]) {
+    if (employeeIds.length === 0) {
+      return [];
+    }
+
+    return this.prisma.employee.findMany({
+      where: {
+        id: {
+          in: employeeIds,
+        },
+      },
+      include: {
+        designation: true,
+      },
+      orderBy: {
+        id: 'asc',
+      },
+    });
+  }
+
   async findByEmployeeAndMonth(
     employeeId: number,
     salaryMonth: Date,
@@ -29,6 +49,92 @@ export class ManualDeductionRepository {
   }
 
   // =========================================================
+  // ADVANCE HISTORY
+  // =========================================================
+
+  async findAdvanceHistoryBeforeMonth(employeeId: number, salaryMonth: Date) {
+    return this.prisma.manualDeduction.findMany({
+      where: {
+        employeeId,
+        salaryMonth: {
+          lt: salaryMonth,
+        },
+      },
+      select: {
+        employeeId: true,
+        salaryMonth: true,
+        newAdvance: true,
+        numberOfInstallments: true,
+        advanceRecovery: true,
+      },
+      orderBy: {
+        salaryMonth: 'asc',
+      },
+    });
+  }
+
+  async findEmployeeIdsWithAdvanceHistoryBeforeMonth(salaryMonth: Date) {
+    return this.prisma.manualDeduction.findMany({
+      where: {
+        salaryMonth: {
+          lt: salaryMonth,
+        },
+        OR: [
+          {
+            newAdvance: {
+              gt: 0,
+            },
+          },
+          {
+            advanceRecovery: {
+              gt: 0,
+            },
+          },
+        ],
+      },
+      select: {
+        employeeId: true,
+      },
+      distinct: ['employeeId'],
+    });
+  }
+
+  async findAdvanceHistoryForEmployeesBeforeMonth(
+    employeeIds: number[],
+    salaryMonth: Date,
+  ) {
+    if (employeeIds.length === 0) {
+      return [];
+    }
+
+    return this.prisma.manualDeduction.findMany({
+      where: {
+        employeeId: {
+          in: employeeIds,
+        },
+        salaryMonth: {
+          lt: salaryMonth,
+        },
+      },
+      select: {
+        employeeId: true,
+        salaryMonth: true,
+        newAdvance: true,
+        numberOfInstallments: true,
+        advanceRecovery: true,
+      },
+      orderBy: [
+        {
+          employeeId: 'asc',
+        },
+        {
+          salaryMonth: 'asc',
+        },
+      ],
+    });
+  }
+
+  // =========================================================
   // FINALIZED PAYROLL LOCK
   // =========================================================
 
@@ -38,7 +144,6 @@ export class ManualDeductionRepository {
         salaryMonth,
         status: PayrollRunStatus.FINALIZED,
       },
-
       orderBy: {
         version: 'desc',
       },
@@ -50,7 +155,6 @@ export class ManualDeductionRepository {
   ): Promise<ManualDeduction> {
     return this.prisma.manualDeduction.create({
       data,
-
       include: {
         employee: {
           include: {
@@ -71,7 +175,6 @@ export class ManualDeductionRepository {
           salaryMonth,
         }),
       },
-
       include: {
         employee: {
           include: {
@@ -79,7 +182,6 @@ export class ManualDeductionRepository {
           },
         },
       },
-
       orderBy: [
         {
           salaryMonth: 'desc',
@@ -96,7 +198,6 @@ export class ManualDeductionRepository {
       where: {
         id,
       },
-
       include: {
         employee: {
           include: {
@@ -115,9 +216,7 @@ export class ManualDeductionRepository {
       where: {
         id,
       },
-
       data,
-
       include: {
         employee: {
           include: {

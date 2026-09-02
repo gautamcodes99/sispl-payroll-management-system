@@ -204,17 +204,25 @@ model VariableAllowance {
 }
 
 model ManualDeduction {
-  id              Int      @id @default(autoincrement())
-  employeeId      Int
-  salaryMonth     DateTime
-  advanceRecovery Decimal  @default(0) @db.Decimal(12, 2)
-  canteen         Decimal  @default(0) @db.Decimal(12, 2)
-  transport       Decimal  @default(0) @db.Decimal(12, 2)
-  uniformRecovery Decimal  @default(0) @db.Decimal(12, 2)
-  fine            Decimal  @default(0) @db.Decimal(12, 2)
-  otherDeduction  Decimal  @default(0) @db.Decimal(12, 2)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id          Int      @id @default(autoincrement())
+  employeeId  Int
+  salaryMonth DateTime
+
+  newAdvance           Decimal @default(0) @db.Decimal(12, 2)
+  numberOfInstallments Int     @default(0)
+
+  // Existing payroll contract.
+  // Business/UI label: Actual Advance Deduction.
+  advanceRecovery Decimal @default(0) @db.Decimal(12, 2)
+
+  canteen         Decimal @default(0) @db.Decimal(12, 2)
+  transport       Decimal @default(0) @db.Decimal(12, 2)
+  uniformRecovery Decimal @default(0) @db.Decimal(12, 2)
+  fine            Decimal @default(0) @db.Decimal(12, 2)
+  otherDeduction  Decimal @default(0) @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 

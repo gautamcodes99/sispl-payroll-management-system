@@ -11,11 +11,25 @@ export class CreateManualDeductionDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  employeeId: number;
+  employeeId!: number;
 
   @IsDateString()
-  salaryMonth: string;
+  salaryMonth!: string;
 
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  newAdvance?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  numberOfInstallments?: number;
+
+  // Business/UI label: Actual Advance Deduction.
+  // Field name retained for existing payroll compatibility.
   @IsOptional()
   @Type(() => Number)
   @IsNumber()

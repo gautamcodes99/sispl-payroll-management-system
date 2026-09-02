@@ -16,6 +16,10 @@ import { SalaryRegisterQueryDto } from './dto/salary-register-query.dto';
 import { BankTransferQueryDto } from './dto/bank-transfer-query.dto';
 import { PayslipQueryDto } from './dto/payslip-query.dto';
 import { HraRegisterQueryDto } from './dto/hra-register-query.dto';
+import { RegisterOfAdvancesQueryDto } from './dto/register-of-advances-query.dto';
+import { RegisterOfDamagesOrLossQueryDto } from './dto/register-of-damages-or-loss-query.dto';
+import { RegisterOfFinesQueryDto } from './dto/register-of-fines-query.dto';
+import { OverallDeductionSummaryQueryDto } from './dto/overall-deduction-summary-query.dto';
 
 @Controller('payroll/reports')
 export class PayrollReportsController {
@@ -119,6 +123,68 @@ export class PayrollReportsController {
   @Get('hra-register')
   async getHraRegister(@Query() query: HraRegisterQueryDto) {
     return this.payrollReportsService.getHraRegister(
+      new Date(query.salaryMonth),
+    );
+  }
+  // =========================================================
+  // FORM XIII - REGISTER OF ADVANCES
+  //
+  // Company-wide statutory Deduction Report.
+  //
+  // Advance position comes from the established Manual
+  // Deduction advance ledger.
+  //
+  // Earnings come from the current persisted Payroll
+  // Employee Snapshot.
+  // =========================================================
+
+  @Get('register-of-advances')
+  async getRegisterOfAdvances(@Query() query: RegisterOfAdvancesQueryDto) {
+    return this.payrollReportsService.getRegisterOfAdvances(
+      new Date(query.salaryMonth),
+    );
+  }
+  // =========================================================
+  // FORM XVI - REGISTER OF DEDUCTIONS FOR DAMAGES OR LOSS
+  //
+  // Company-wide statutory Deduction Report.
+  //
+  // Other Deduction from the persisted Payroll Snapshot is
+  // treated as Amount of Deduction Imposed.
+  // =========================================================
+
+  @Get('register-of-damages-or-loss')
+  async getRegisterOfDamagesOrLoss(
+    @Query() query: RegisterOfDamagesOrLossQueryDto,
+  ) {
+    return this.payrollReportsService.getRegisterOfDamagesOrLoss(
+      new Date(query.salaryMonth),
+    );
+  }
+  // =========================================================
+  // FORM XVII - REGISTER OF FINES
+  //
+  // Company-wide statutory Deduction Report.
+  //
+  // Fine amount comes from the persisted Payroll Snapshot.
+  // Department is intentionally not used.
+  // =========================================================
+
+  @Get('register-of-fines')
+  async getRegisterOfFines(@Query() query: RegisterOfFinesQueryDto) {
+    return this.payrollReportsService.getRegisterOfFines(
+      new Date(query.salaryMonth),
+    );
+  }
+  // =========================================================
+  // OVERALL DEDUCTION SUMMARY
+  // =========================================================
+
+  @Get('overall-deduction-summary')
+  async getOverallDeductionSummary(
+    @Query() query: OverallDeductionSummaryQueryDto,
+  ) {
+    return this.payrollReportsService.getOverallDeductionSummary(
       new Date(query.salaryMonth),
     );
   }

@@ -5,11 +5,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PayrollReportsRepository } from './repository/payroll-reports.repository';
+import { ManualDeductionService } from '../../manual-deduction/service/manual-deduction.service';
 
 @Injectable()
 export class PayrollReportsService {
   constructor(
     private readonly payrollReportsRepository: PayrollReportsRepository,
+    private readonly manualDeductionService: ManualDeductionService,
   ) {}
 
   // =========================================================
@@ -1245,6 +1247,10 @@ export class PayrollReportsService {
         uanNumber: snapshot.uanNumber,
         esicNumber: snapshot.esicNumber,
 
+        bankName: snapshot.bankName,
+        accountNumber: snapshot.accountNumber,
+        joiningDate: snapshot.employee.joiningDate,
+
         attendance: {
           presentDays: Number(snapshot.presentDays),
           halfDays: Number(snapshot.halfDays),
@@ -1446,6 +1452,557 @@ export class PayrollReportsService {
           wages: this.money(totals.wages),
 
           houseRentAllowance: this.money(totals.houseRentAllowance),
+        },
+      },
+    };
+  }
+  // =========================================================
+  // FORM XIII - REGISTER OF ADVANCES
+  //
+  // Company-wide statutory Deduction Report.
+  //
+  // Sources:
+  // - PayrollEmployeeSnapshot:
+  //     historical payroll earnings / designation
+  //
+  // - Manual Deduction monthly advance ledger:
+  //     Old Advance
+  //     New Advance
+  //     Remaining Installments
+  //     Actual Advance Deduction
+  //     Closing / Pending Advance
+  //
+  // The advance ledger calculation is NOT duplicated here.
+  // It is obtained from ManualDeductionService.findMonthlySheet().
+  //
+  // Locked report rules:
+  // - Purpose of Advance = blank
+  // - Amount repaid = Actual Advance Deduction
+  // - "Date on which Total Amount Paid" column displays the
+  //   pending advance balance as per approved SISPL format
+  // - Signature / Thumb Impression = BANK TRANSFER
+  // =========================================================
+
+  async getRegisterOfAdvances(salaryMonthInput: Date) {
+    if (Number.isNaN(salaryMonthInput.getTime())) {
+      throw new BadRequestException('Salary month is invalid.');
+    }
+
+    const salaryMonth = this.normalizeSalaryMonth(salaryMonthInput);
+
+    const [payrollRun, advanceRows] = await Promise.all([
+      this.payrollReportsRepository.findCurrentPayrollRunWithSnapshots(
+        salaryMonth,
+      ),
+
+      this.manualDeductionService.findMonthlySheet(salaryMonth.toISOString()),
+    ]);
+
+    if (!payrollRun) {
+      throw new NotFoundException(
+        `No current finalized Payroll Run found for ${salaryMonth.toISOString()}.`,
+      );
+    }
+
+    const snapshotByEmployeeId = new Map(
+      payrollRun.snapshots.map((snapshot) => [snapshot.employeeId, snapshot]),
+    );
+
+    const reportAdvanceRows = advanceRows.filter(
+      (row) =>
+        row.oldAdvance > 0 || row.newAdvance > 0 || row.closingAdvance > 0,
+    );
+
+    const employees = reportAdvanceRows.map((advanceRow, index) => {
+      const snapshot = snapshotByEmployeeId.get(advanceRow.employeeId);
+
+      return {
+        serialNumber: index + 1,
+
+        employeeId: advanceRow.employeeId,
+        employeeName: advanceRow.employeeName,
+
+        natureOfEmployment:
+          snapshot?.designationName ?? advanceRow.designation ?? null,
+
+        earningDuringWagePeriod: snapshot ? this.money(snapshot.gross) : 0,
+
+        oldAdvance: this.money(advanceRow.oldAdvance),
+
+        newAdvance: this.money(advanceRow.newAdvance),
+
+        purposeOfAdvance: null,
+
+        numberOfInstallments: advanceRow.remainingInstallments,
+
+        actualAdvanceDeduction: this.money(advanceRow.advanceRecovery),
+
+        pendingAdvance: this.money(advanceRow.closingAdvance),
+
+        signatureOrThumbImpression: 'BANK TRANSFER',
+      };
+    });
+
+    const totals = employees.reduce(
+      (total, employee) => {
+        total.earningDuringWagePeriod += employee.earningDuringWagePeriod;
+
+        total.oldAdvance += employee.oldAdvance;
+        total.newAdvance += employee.newAdvance;
+
+        total.actualAdvanceDeduction += employee.actualAdvanceDeduction;
+
+        total.pendingAdvance += employee.pendingAdvance;
+
+        return total;
+      },
+      {
+        earningDuringWagePeriod: 0,
+        oldAdvance: 0,
+        newAdvance: 0,
+        actualAdvanceDeduction: 0,
+        pendingAdvance: 0,
+      },
+    );
+
+    return {
+      success: true,
+      message: 'Form XIII Register of Advances fetched successfully.',
+
+      data: {
+        report: {
+          type: 'FORM_XIII_REGISTER_OF_ADVANCES',
+
+          salaryMonth: payrollRun.salaryMonth,
+
+          payrollRun: {
+            id: payrollRun.id,
+            version: payrollRun.version,
+            status: payrollRun.status,
+            finalizedAt: payrollRun.finalizedAt,
+            unlockedAt: payrollRun.unlockedAt,
+          },
+
+          employeeCount: employees.length,
+        },
+
+        employees,
+
+        totals: {
+          earningDuringWagePeriod: this.money(totals.earningDuringWagePeriod),
+
+          oldAdvance: this.money(totals.oldAdvance),
+
+          newAdvance: this.money(totals.newAdvance),
+
+          actualAdvanceDeduction: this.money(totals.actualAdvanceDeduction),
+
+          pendingAdvance: this.money(totals.pendingAdvance),
+        },
+      },
+    };
+  }
+  // =========================================================
+  // FORM XVI - REGISTER OF DEDUCTIONS FOR DAMAGES OR LOSS
+  //
+  // Company-wide statutory Deduction Report.
+  //
+  // Source of deduction:
+  // PayrollEmployeeSnapshot.otherDeduction
+  //
+  // This intentionally uses the persisted Payroll Snapshot
+  // rather than recalculating or reading a mutable current
+  // month deduction amount.
+  //
+  // Locked SISPL report rules:
+  // - Only employees with Other Deduction > 0 are included.
+  // - Father's / Husband's Name comes from Employee Profile.
+  // - Married female -> Husband Name.
+  // - Otherwise      -> Father Name.
+  // - Number of instalments = always 1.
+  // - Unsupported statutory fields remain blank.
+  // =========================================================
+
+  async getRegisterOfDamagesOrLoss(salaryMonthInput: Date) {
+    if (Number.isNaN(salaryMonthInput.getTime())) {
+      throw new BadRequestException('Salary month is invalid.');
+    }
+
+    const salaryMonth = this.normalizeSalaryMonth(salaryMonthInput);
+
+    const payrollRun =
+      await this.payrollReportsRepository.findCurrentPayrollRunWithSnapshots(
+        salaryMonth,
+      );
+
+    if (!payrollRun) {
+      throw new NotFoundException(
+        `No current finalized Payroll Run found for ${salaryMonth.toISOString()}.`,
+      );
+    }
+
+    const applicableSnapshots = payrollRun.snapshots.filter(
+      (snapshot) => this.money(snapshot.otherDeduction) > 0,
+    );
+
+    const employeeIds = applicableSnapshots.map(
+      (snapshot) => snapshot.employeeId,
+    );
+
+    const employeeDetails =
+      await this.payrollReportsRepository.findDeductionReportEmployeeFamilyDetails(
+        employeeIds,
+      );
+
+    const employeeDetailsById = new Map(
+      employeeDetails.map((employee) => [employee.id, employee]),
+    );
+
+    const employees = applicableSnapshots.map((snapshot, index) => {
+      const employee = employeeDetailsById.get(snapshot.employeeId);
+
+      const isMarriedFemale =
+        employee?.gender?.trim().toUpperCase() === 'FEMALE' &&
+        employee?.maritalStatus?.trim().toUpperCase() === 'MARRIED';
+
+      const fatherOrHusbandName = isMarriedFemale
+        ? (employee?.husbandName ?? null)
+        : (employee?.fatherName ?? null);
+
+      return {
+        serialNumber: index + 1,
+
+        employeeId: snapshot.employeeId,
+        employeeName: snapshot.employeeName,
+
+        fatherOrHusbandName,
+
+        designation: snapshot.designationName,
+
+        particularsOfDamagesOrLoss: null,
+
+        dateOfDamagesOrLoss: null,
+
+        whetherWorkmanShowedCauseAgainstDeduction: null,
+
+        personPresentDuringExplanation: null,
+
+        amountOfDeductionImposed: this.money(snapshot.otherDeduction),
+
+        numberOfInstallments: 1,
+
+        firstInstallmentRecoveryDate: null,
+
+        lastInstallmentRecoveryDate: null,
+
+        remarks: null,
+
+        signatureOfEmployerOrRepresentative: null,
+      };
+    });
+
+    const totalAmountOfDeductionImposed = employees.reduce(
+      (total, employee) => total + employee.amountOfDeductionImposed,
+      0,
+    );
+
+    return {
+      success: true,
+      message:
+        'Form XVI Register of Deductions for Damages or Loss fetched successfully.',
+
+      data: {
+        report: {
+          type: 'FORM_XVI_REGISTER_OF_DEDUCTIONS_FOR_DAMAGES_OR_LOSS',
+
+          salaryMonth: payrollRun.salaryMonth,
+
+          payrollRun: {
+            id: payrollRun.id,
+            version: payrollRun.version,
+            status: payrollRun.status,
+            finalizedAt: payrollRun.finalizedAt,
+            unlockedAt: payrollRun.unlockedAt,
+          },
+
+          employeeCount: employees.length,
+        },
+
+        employees,
+
+        totals: {
+          amountOfDeductionImposed: this.money(totalAmountOfDeductionImposed),
+        },
+      },
+    };
+  }
+  // =========================================================
+  // FORM XVII - REGISTER OF FINES
+  //
+  // Company-wide statutory Deduction Report.
+  //
+  // Source of truth:
+  // PayrollEmployeeSnapshot
+  //
+  // Locked SISPL rules:
+  // - Only employees with Fine > 0 are included.
+  // - Father's / Husband's Name comes from Employee Profile.
+  // - Married female -> Husband Name.
+  // - Otherwise      -> Father Name.
+  // - Department is not used.
+  // - Rate of Wages =
+  //     (Monthly Basic + Monthly DA) / 26
+  // - Fine amount comes directly from snapshot.fine.
+  // - Unsupported statutory fields remain blank.
+  // =========================================================
+
+  async getRegisterOfFines(salaryMonthInput: Date) {
+    if (Number.isNaN(salaryMonthInput.getTime())) {
+      throw new BadRequestException('Salary month is invalid.');
+    }
+
+    const salaryMonth = this.normalizeSalaryMonth(salaryMonthInput);
+
+    const payrollRun =
+      await this.payrollReportsRepository.findCurrentPayrollRunWithSnapshots(
+        salaryMonth,
+      );
+
+    if (!payrollRun) {
+      throw new NotFoundException(
+        `No current finalized Payroll Run found for ${salaryMonth.toISOString()}.`,
+      );
+    }
+
+    const applicableSnapshots = payrollRun.snapshots.filter(
+      (snapshot) => this.money(snapshot.fine) > 0,
+    );
+
+    const employeeIds = applicableSnapshots.map(
+      (snapshot) => snapshot.employeeId,
+    );
+
+    const employeeDetails =
+      await this.payrollReportsRepository.findDeductionReportEmployeeFamilyDetails(
+        employeeIds,
+      );
+
+    const employeeDetailsById = new Map(
+      employeeDetails.map((employee) => [employee.id, employee]),
+    );
+
+    const employees = applicableSnapshots.map((snapshot, index) => {
+      const employee = employeeDetailsById.get(snapshot.employeeId);
+
+      const isMarriedFemale =
+        employee?.gender?.trim().toUpperCase() === 'FEMALE' &&
+        employee?.maritalStatus?.trim().toUpperCase() === 'MARRIED';
+
+      const fatherOrHusbandName = isMarriedFemale
+        ? (employee?.husbandName ?? null)
+        : (employee?.fatherName ?? null);
+
+      const monthlyBasic = this.money(snapshot.monthlyBasic);
+      const monthlyDa = this.money(snapshot.monthlyDa);
+
+      const rateOfWages = this.money((monthlyBasic + monthlyDa) / 26);
+
+      return {
+        serialNumber: index + 1,
+
+        employeeId: snapshot.employeeId,
+        employeeName: snapshot.employeeName,
+
+        fatherOrHusbandName,
+
+        designation: snapshot.designationName,
+
+        actOrOmissionForFine: null,
+
+        dateOfOffence: null,
+
+        whetherEmployeeShowedCauseAgainstFine: null,
+
+        personPresentDuringExplanation: null,
+
+        rateOfWages,
+
+        amountOfFineImposed: this.money(snapshot.fine),
+
+        dateOfFineRealised: null,
+
+        remarks: null,
+      };
+    });
+
+    const totalFineAmount = employees.reduce(
+      (total, employee) => total + employee.amountOfFineImposed,
+      0,
+    );
+
+    return {
+      success: true,
+      message: 'Form XVII Register of Fines fetched successfully.',
+
+      data: {
+        report: {
+          type: 'FORM_XVII_REGISTER_OF_FINES',
+
+          salaryMonth: payrollRun.salaryMonth,
+
+          payrollRun: {
+            id: payrollRun.id,
+            version: payrollRun.version,
+            status: payrollRun.status,
+            finalizedAt: payrollRun.finalizedAt,
+            unlockedAt: payrollRun.unlockedAt,
+          },
+
+          employeeCount: employees.length,
+        },
+
+        employees,
+
+        totals: {
+          fineAmount: this.money(totalFineAmount),
+        },
+      },
+    };
+  }
+  // =========================================================
+  // OVERALL DEDUCTION SUMMARY
+  //
+  // Company-wide internal Deduction Report.
+  //
+  // Source of truth:
+  // Manual Deduction monthly sheet / advance ledger.
+  //
+  // Locked SISPL rules:
+  // - Includes current-month deductions.
+  // - Includes carried/pending advance balances.
+  // - No Designation column.
+  // - No Site / Work Type / Department filtering.
+  // - Advance values come from the established advance ledger.
+  // =========================================================
+
+  async getOverallDeductionSummary(salaryMonthInput: Date) {
+    if (Number.isNaN(salaryMonthInput.getTime())) {
+      throw new BadRequestException('Salary month is invalid.');
+    }
+
+    const salaryMonth = this.normalizeSalaryMonth(salaryMonthInput);
+
+    const [payrollRun, monthlySheet] = await Promise.all([
+      this.payrollReportsRepository.findCurrentPayrollRunWithSnapshots(
+        salaryMonth,
+      ),
+
+      this.manualDeductionService.findMonthlySheet(salaryMonth.toISOString()),
+    ]);
+
+    if (!payrollRun) {
+      throw new NotFoundException(
+        `No current finalized Payroll Run found for ${salaryMonth.toISOString()}.`,
+      );
+    }
+
+    const reportRows = monthlySheet.filter(
+      (row) =>
+        row.oldAdvance > 0 ||
+        row.newAdvance > 0 ||
+        row.advanceRecovery > 0 ||
+        row.closingAdvance > 0 ||
+        row.canteen > 0 ||
+        row.transport > 0 ||
+        row.uniformRecovery > 0 ||
+        row.fine > 0 ||
+        row.otherDeduction > 0,
+    );
+
+    const employees = reportRows.map((row, index) => ({
+      serialNumber: index + 1,
+
+      employeeId: row.employeeId,
+      employeeName: row.employeeName,
+
+      oldAdvance: this.money(row.oldAdvance),
+      newAdvance: this.money(row.newAdvance),
+      totalAdvance: this.money(row.totalAdvance),
+
+      actualAdvanceDeduction: this.money(row.advanceRecovery),
+
+      balanceAdvance: this.money(row.closingAdvance),
+
+      canteen: this.money(row.canteen),
+      transport: this.money(row.transport),
+      uniform: this.money(row.uniformRecovery),
+      fine: this.money(row.fine),
+      otherDeduction: this.money(row.otherDeduction),
+    }));
+
+    const totals = employees.reduce(
+      (result, employee) => {
+        result.oldAdvance += employee.oldAdvance;
+        result.newAdvance += employee.newAdvance;
+        result.totalAdvance += employee.totalAdvance;
+        result.actualAdvanceDeduction += employee.actualAdvanceDeduction;
+        result.balanceAdvance += employee.balanceAdvance;
+        result.canteen += employee.canteen;
+        result.transport += employee.transport;
+        result.uniform += employee.uniform;
+        result.fine += employee.fine;
+        result.otherDeduction += employee.otherDeduction;
+
+        return result;
+      },
+      {
+        oldAdvance: 0,
+        newAdvance: 0,
+        totalAdvance: 0,
+        actualAdvanceDeduction: 0,
+        balanceAdvance: 0,
+        canteen: 0,
+        transport: 0,
+        uniform: 0,
+        fine: 0,
+        otherDeduction: 0,
+      },
+    );
+
+    return {
+      success: true,
+      message: 'Overall Deduction Summary fetched successfully.',
+
+      data: {
+        report: {
+          type: 'OVERALL_DEDUCTION_SUMMARY',
+
+          salaryMonth: payrollRun.salaryMonth,
+
+          payrollRun: {
+            id: payrollRun.id,
+            version: payrollRun.version,
+            status: payrollRun.status,
+            finalizedAt: payrollRun.finalizedAt,
+            unlockedAt: payrollRun.unlockedAt,
+          },
+
+          employeeCount: employees.length,
+        },
+
+        employees,
+
+        totals: {
+          oldAdvance: this.money(totals.oldAdvance),
+          newAdvance: this.money(totals.newAdvance),
+          totalAdvance: this.money(totals.totalAdvance),
+          actualAdvanceDeduction: this.money(totals.actualAdvanceDeduction),
+          balanceAdvance: this.money(totals.balanceAdvance),
+          canteen: this.money(totals.canteen),
+          transport: this.money(totals.transport),
+          uniform: this.money(totals.uniform),
+          fine: this.money(totals.fine),
+          otherDeduction: this.money(totals.otherDeduction),
         },
       },
     };

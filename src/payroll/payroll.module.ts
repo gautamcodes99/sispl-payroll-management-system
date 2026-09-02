@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
+import { ManualDeductionModule } from '../manual-deduction/manual-deduction.module';
 import { PayrollRepository } from './repository/payroll.repository';
 import { PayrollCalculationService } from './payroll-calculation.service';
 import { ComplianceCalculatorService } from './compliance/compliance-calculator.service';
@@ -10,7 +11,7 @@ import { PayrollReportsService } from './reports/payroll-reports.service';
 import { PayrollReportsRepository } from './reports/repository/payroll-reports.repository';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, ManualDeductionModule],
 
   controllers: [PayrollController, PayrollReportsController],
 
