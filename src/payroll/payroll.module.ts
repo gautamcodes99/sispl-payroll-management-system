@@ -9,9 +9,10 @@ import { PayrollService } from './payroll.service';
 import { PayrollReportsController } from './reports/payroll-reports.controller';
 import { PayrollReportsService } from './reports/payroll-reports.service';
 import { PayrollReportsRepository } from './reports/repository/payroll-reports.repository';
+import { ComplianceReportsModule } from './reports/compliance/compliance-reports.module';
 
 @Module({
-  imports: [PrismaModule, ManualDeductionModule],
+  imports: [PrismaModule, ManualDeductionModule, ComplianceReportsModule],
 
   controllers: [PayrollController, PayrollReportsController],
 
