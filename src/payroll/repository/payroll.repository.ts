@@ -25,18 +25,26 @@ export class PayrollRepository {
   // =========================================================
   // COMPANY-WIDE MONTHLY PAYROLL EMPLOYEES
   //
-  // Include:
-  //
-  // 1. All currently ACTIVE employees.
-  //
-  // 2. Employees who have payroll-relevant attendance during
-  //    the requested wage month even if their current status
-  //    is later INACTIVE / RESIGNED / TERMINATED.
+  // Payroll is generated only for employees who have at least
+  // one payroll-relevant attendance row in the requested
+  // salary month.
   //
   // Payroll-relevant attendance:
   // PRESENT
   // HALF_DAY
   // PAID_HOLIDAY
+  //
+  // Current Employee status is intentionally NOT used here.
+  // An employee who later becomes INACTIVE / RESIGNED /
+  // TERMINATED must still be included in a historical salary
+  // month if they worked during that month.
+  //
+  // ABSENT / WEEKLY_OFF / HOLIDAY / LEAVE and no-attendance
+  // employees do not independently qualify for payroll.
+  //
+  // OT also does not independently establish payroll
+  // eligibility; it remains supplementary to payable
+  // attendance.
   // =========================================================
 
   async findMonthlyPayrollEmployees(
@@ -51,26 +59,18 @@ export class PayrollRepository {
 
     return this.prisma.employee.findMany({
       where: {
-        OR: [
-          {
-            status: 'ACTIVE',
-          },
+        attendances: {
+          some: {
+            attendanceDate: {
+              gte: periodStart,
+              lt: periodEndExclusive,
+            },
 
-          {
-            attendances: {
-              some: {
-                attendanceDate: {
-                  gte: periodStart,
-                  lt: periodEndExclusive,
-                },
-
-                status: {
-                  in: payrollStatuses,
-                },
-              },
+            status: {
+              in: payrollStatuses,
             },
           },
-        ],
+        },
       },
 
       select: {
