@@ -150,11 +150,24 @@ export class EmployeeReportsService {
   // Filter:
   // - inclusive From Date -> To Date
   //
-  // Selection:
-  // - Employee.leftDate only.
+  // Locked Last Working Date rule:
   //
-  // Employee.status is display-only and does not control
-  // inclusion in this report.
+  // 1. Latest qualifying Daily Attendance across ALL history:
+  //    - PRESENT
+  //    - HALF_DAY
+  //    - PAID_HOLIDAY
+  //
+  // 2. If Employee.leftDate exists, the confirmed HR value
+  //    overrides attendance-derived Last Working Date.
+  //
+  // 3. Only after the final Last Working Date is decided do we
+  //    apply the requested From Date -> To Date filter.
+  //
+  // 4. Employee.status is display-only and does not control
+  //    inclusion.
+  //
+  // This prevents an employee who later worked again from being
+  // incorrectly shown as a Left Employee for an earlier range.
   // =========================================================
 
   async getLeftEmployeeReport(query: LeftEmployeeReportQueryDto) {
@@ -167,22 +180,18 @@ export class EmployeeReportsService {
 
     const toDateExclusive = this.addUtcDays(toDate, 1);
 
-    const employees = await this.employeeReportsRepository.getLeftEmployees(
-      fromDate,
-      toDateExclusive,
-    );
+    const employees = await this.employeeReportsRepository.getLeftEmployees();
 
-    return {
-      success: true,
-      message: 'Left Employee Report fetched successfully.',
-      data: {
-        reportType: 'LEFT_EMPLOYEE_REPORT',
-        fromDate: query.fromDate,
-        toDate: query.toDate,
-        employeeCount: employees.length,
+    const reportEmployees = employees
+      .map((employee) => {
+        const lastWorkingDate =
+          employee.leftDate ?? employee.attendanceDerivedLastWorkingDate;
 
-        employees: employees.map((employee, index) => ({
-          sno: index + 1,
+        if (!lastWorkingDate) {
+          return null;
+        }
+
+        return {
           employeeId: employee.id,
           uanNumber: employee.uanNumber,
           esicNumber: employee.esicNumber,
@@ -196,12 +205,41 @@ export class EmployeeReportsService {
           designation: employee.designation.designationName,
           joiningDate: employee.joiningDate,
 
-          // Existing Employee.leftDate is the report's
-          // Last Working Date / Date of Leaving.
-          lastWorkingDate: employee.leftDate,
+          lastWorkingDate,
 
-          // Current Employee Master status, display only.
+          // Actual current Employee Master status.
           status: employee.status,
+        };
+      })
+      .filter(
+        (employee): employee is NonNullable<typeof employee> =>
+          employee !== null &&
+          employee.lastWorkingDate.getTime() >= fromDate.getTime() &&
+          employee.lastWorkingDate.getTime() < toDateExclusive.getTime(),
+      )
+      .sort((a, b) => {
+        const dateDifference =
+          a.lastWorkingDate.getTime() - b.lastWorkingDate.getTime();
+
+        if (dateDifference !== 0) {
+          return dateDifference;
+        }
+
+        return a.employeeId - b.employeeId;
+      });
+
+    return {
+      success: true,
+      message: 'Left Employee Report fetched successfully.',
+      data: {
+        reportType: 'LEFT_EMPLOYEE_REPORT',
+        fromDate: query.fromDate,
+        toDate: query.toDate,
+        employeeCount: reportEmployees.length,
+
+        employees: reportEmployees.map((employee, index) => ({
+          sno: index + 1,
+          ...employee,
         })),
       },
     };
