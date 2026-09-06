@@ -408,4 +408,394 @@ export class BenefitsReportsService {
       },
     };
   }
+
+  // =========================================================
+  // FORM 20 - LEAVE ENCASHMENT REGISTER
+  //
+  // DAYS PERFORMED =
+  // snapshot.payableDays - snapshot.paidHolidays
+  //
+  // Always zero:
+  // - lay-off
+  // - maternity leave with wages
+  // - leave with wages enjoyed
+  // - preceding year leave balance
+  // - leave refused
+  // - leave not desired
+  // - leave enjoyed from
+  // - leave enjoyed to
+  //
+  // LEAVE EARNED =
+  // monthly total days / 20
+  //
+  // BALANCE TO CREDIT =
+  // monthly leave earned
+  //
+  // NORMAL RATE OF WAGES =
+  // (snapshot.monthlyBasic + snapshot.monthlyDa) / 26
+  //
+  // AVERAGE RATE GIVEN BY BAL-C =
+  // latest month in selected year where DAYS > 0
+  //
+  // CASH EQUIVALENT =
+  // balance to credit * AVERAGE RATE GIVEN BY BAL-C
+  //
+  // Remark stays blank until the Leave Pay Bank Transfer
+  // payment workflow persists payment status/date.
+  // =========================================================
+
+  async getForm20(year: number) {
+    this.validateYear(year);
+
+    const yearStart = new Date(Date.UTC(year, 0, 1));
+    const nextYearStart = new Date(Date.UTC(year + 1, 0, 1));
+
+    const payrollRuns =
+      await this.benefitsReportsRepository.findCurrentReportablePayrollRunsForYear(
+        yearStart,
+        nextYearStart,
+      );
+
+    if (payrollRuns.length === 0) {
+      throw new NotFoundException(
+        `No current reportable Payroll Runs found for year ${year}.`,
+      );
+    }
+
+    const currentRunByMonth = new Map<number, (typeof payrollRuns)[number]>();
+
+    for (const payrollRun of payrollRuns) {
+      const monthIndex = payrollRun.salaryMonth.getUTCMonth();
+      const existing = currentRunByMonth.get(monthIndex);
+
+      if (!existing || payrollRun.version > existing.version) {
+        currentRunByMonth.set(monthIndex, payrollRun);
+      }
+    }
+
+    const currentRuns = Array.from(currentRunByMonth.values()).sort(
+      (a, b) =>
+        a.salaryMonth.getTime() - b.salaryMonth.getTime() ||
+        b.version - a.version,
+    );
+
+    type Snapshot = (typeof currentRuns)[number]['snapshots'][number];
+
+    type Form20MonthContext = {
+      month: number;
+      monthName: string;
+      rawDaysPerformed: number;
+      rawNormalRateOfWages: number | null;
+      hasSnapshot: boolean;
+    };
+
+    type Form20EmployeeContext = {
+      employeeId: number;
+      months: Form20MonthContext[];
+      latestSnapshot: Snapshot;
+      latestSalaryMonth: Date;
+      fatherName: string | null;
+      joiningDate: Date;
+    };
+
+    const employeeMap = new Map<number, Form20EmployeeContext>();
+
+    for (const payrollRun of currentRuns) {
+      const monthIndex = payrollRun.salaryMonth.getUTCMonth();
+
+      for (const snapshot of payrollRun.snapshots) {
+        const rawDaysPerformed =
+          this.number(snapshot.payableDays) -
+          this.number(snapshot.paidHolidays);
+
+        const monthlyBasic = this.number(snapshot.monthlyBasic);
+        const monthlyDa = this.number(snapshot.monthlyDa);
+
+        const rawNormalRateOfWages =
+          (monthlyBasic + monthlyDa) / 26;
+
+        let employee = employeeMap.get(snapshot.employeeId);
+
+        if (!employee) {
+          employee = {
+            employeeId: snapshot.employeeId,
+
+            months: this.monthNames.map((monthName, index) => ({
+              month: index + 1,
+              monthName,
+              rawDaysPerformed: 0,
+              rawNormalRateOfWages: null,
+              hasSnapshot: false,
+            })),
+
+            latestSnapshot: snapshot,
+            latestSalaryMonth: payrollRun.salaryMonth,
+
+            fatherName: snapshot.employee.fatherName,
+            joiningDate: snapshot.employee.joiningDate,
+          };
+
+          employeeMap.set(snapshot.employeeId, employee);
+        }
+
+        employee.months[monthIndex] = {
+          month: monthIndex + 1,
+          monthName: this.monthNames[monthIndex],
+          rawDaysPerformed,
+          rawNormalRateOfWages,
+          hasSnapshot: true,
+        };
+
+        if (
+          payrollRun.salaryMonth.getTime() >
+          employee.latestSalaryMonth.getTime()
+        ) {
+          employee.latestSnapshot = snapshot;
+          employee.latestSalaryMonth = payrollRun.salaryMonth;
+        }
+
+        employee.fatherName = snapshot.employee.fatherName;
+        employee.joiningDate = snapshot.employee.joiningDate;
+      }
+    }
+
+    const employeeContexts = Array.from(employeeMap.values()).sort(
+      (a, b) => a.employeeId - b.employeeId,
+    );
+
+    const employees = employeeContexts.map((employee, index) => {
+      const latestWorkedMonth = [...employee.months]
+        .reverse()
+        .find(
+          (month) =>
+            month.hasSnapshot &&
+            month.rawDaysPerformed > 0 &&
+            month.rawNormalRateOfWages !== null,
+        );
+
+      const rawAverageRateGivenByBalance =
+        latestWorkedMonth?.rawNormalRateOfWages ?? null;
+
+      let rawTotalDaysPerformed = 0;
+      let rawTotalDays = 0;
+      let rawTotalLeaveEarned = 0;
+      let rawTotalLeaveCredit = 0;
+      let rawTotalBalanceToCredit = 0;
+      let rawTotalCashEquivalent = 0;
+
+      const months = employee.months.map((month) => {
+        const rawDaysPerformed = month.rawDaysPerformed;
+
+        const rawDaysOfLayOff = 0;
+        const rawDaysOfMaternityLeaveWithWages = 0;
+        const rawDaysOfLeaveWithWagesEnjoyed = 0;
+
+        const rawMonthTotalDays =
+          rawDaysPerformed +
+          rawDaysOfLayOff +
+          rawDaysOfMaternityLeaveWithWages;
+
+        const rawBalanceFromPrecedingYear = 0;
+
+        const rawLeaveEarnedDuringYear = rawMonthTotalDays / 20;
+
+        const rawMonthTotalLeaveCredit =
+          rawBalanceFromPrecedingYear +
+          rawLeaveEarnedDuringYear;
+
+        const leaveWithWagesRefused = 0;
+        const leaveWithWagesNotDesired = 0;
+
+        const leaveEnjoyedFrom = 0;
+        const leaveEnjoyedTo = 0;
+
+        const rawBalanceToCredit = rawMonthTotalLeaveCredit;
+
+        const rawCashEquivalent =
+          rawAverageRateGivenByBalance === null
+            ? 0
+            : rawBalanceToCredit *
+              rawAverageRateGivenByBalance;
+
+        rawTotalDaysPerformed += rawDaysPerformed;
+        rawTotalDays += rawMonthTotalDays;
+        rawTotalLeaveEarned += rawLeaveEarnedDuringYear;
+        rawTotalLeaveCredit += rawMonthTotalLeaveCredit;
+        rawTotalBalanceToCredit += rawBalanceToCredit;
+        rawTotalCashEquivalent += rawCashEquivalent;
+
+        return {
+          month: month.month,
+          monthName: month.monthName,
+
+          daysWorkedPerformed: this.roundTwo(rawDaysPerformed),
+
+          daysOfLayOff: rawDaysOfLayOff,
+
+          daysOfMaternityLeaveWithWages:
+            rawDaysOfMaternityLeaveWithWages,
+
+          daysOfLeaveWithWagesEnjoyed:
+            rawDaysOfLeaveWithWagesEnjoyed,
+
+          totalDays: this.roundTwo(rawMonthTotalDays),
+
+          balanceLeaveWithWagesFromPrecedingYear:
+            rawBalanceFromPrecedingYear,
+
+          leaveWithWagesEarnedDuringYear:
+            this.roundTwo(rawLeaveEarnedDuringYear),
+
+          totalLeaveCredit:
+            this.roundTwo(rawMonthTotalLeaveCredit),
+
+          leaveWithWagesRefused,
+
+          leaveWithWagesNotDesired,
+
+          leaveWithWagesEnjoyedFrom: leaveEnjoyedFrom,
+
+          leaveWithWagesEnjoyedTo: leaveEnjoyedTo,
+
+          balanceToCredit:
+            this.roundTwo(rawBalanceToCredit),
+
+          normalRateOfWages:
+            month.rawNormalRateOfWages === null
+              ? null
+              : this.roundTwo(
+                  month.rawNormalRateOfWages,
+                ),
+
+          cashEquivalent:
+            this.roundTwo(rawCashEquivalent),
+
+          remark: null,
+        };
+      });
+
+      return {
+        serialNumber: index + 1,
+
+        employeeId: employee.employeeId,
+
+        header: {
+          nameOfWorker:
+            employee.latestSnapshot.employeeName,
+
+          fatherOrHusbandName:
+            employee.fatherName,
+
+          averageRateGivenByBalance:
+            rawAverageRateGivenByBalance === null
+              ? null
+              : this.roundTwo(
+                  rawAverageRateGivenByBalance,
+                ),
+
+          dischargedWorker: null,
+
+          ticketNumber: employee.employeeId,
+
+          occupation:
+            employee.latestSnapshot.designationName,
+
+          pageNumberOldNew: null,
+
+          dateOfDischarge: null,
+
+          nameOfFactory:
+            'SAIBABA INDUSTRIAL SERVICES PVT LTD',
+
+          dateOfEntryIntoService:
+            employee.joiningDate,
+
+          workersRegisterSerialNumber: null,
+
+          paymentMadeInLieuOfLeaveWithWages: null,
+
+          department:
+            '(CASUAL + PIECE RATE + VENDOR)',
+        },
+
+        months,
+
+        totals: {
+          daysWorkedPerformed:
+            this.roundTwo(rawTotalDaysPerformed),
+
+          daysOfLayOff: 0,
+
+          daysOfMaternityLeaveWithWages: 0,
+
+          daysOfLeaveWithWagesEnjoyed: 0,
+
+          totalDays:
+            this.roundTwo(rawTotalDays),
+
+          balanceLeaveWithWagesFromPrecedingYear: 0,
+
+          leaveWithWagesEarnedDuringYear:
+            this.roundTwo(rawTotalLeaveEarned),
+
+          totalLeaveCredit:
+            this.roundTwo(rawTotalLeaveCredit),
+
+          leaveWithWagesRefused: 0,
+
+          leaveWithWagesNotDesired: 0,
+
+          leaveWithWagesEnjoyedFrom: 0,
+
+          leaveWithWagesEnjoyedTo: 0,
+
+          balanceToCredit:
+            this.roundTwo(rawTotalBalanceToCredit),
+
+          normalRateOfWages: null,
+
+          cashEquivalent:
+            this.roundValue(rawTotalCashEquivalent),
+
+          remark: null,
+        },
+      };
+    });
+
+    return {
+      success: true,
+
+      message:
+        'Form 20 - Leave Encashment Register fetched successfully.',
+
+      data: {
+        report: {
+          type: 'FORM_20_LEAVE_ENCASHMENT_REGISTER',
+
+          year,
+
+          employeeCount: employees.length,
+
+          fixedHeader: {
+            nameOfFactory:
+              'SAIBABA INDUSTRIAL SERVICES PVT LTD',
+
+            department:
+              '(CASUAL + PIECE RATE + VENDOR)',
+          },
+
+          payrollRuns: currentRuns.map((payrollRun) => ({
+            id: payrollRun.id,
+            salaryMonth: payrollRun.salaryMonth,
+            version: payrollRun.version,
+            status: payrollRun.status,
+            finalizedAt: payrollRun.finalizedAt,
+            unlockedAt: payrollRun.unlockedAt,
+          })),
+        },
+
+        employees,
+      },
+    };
+  }
 }
