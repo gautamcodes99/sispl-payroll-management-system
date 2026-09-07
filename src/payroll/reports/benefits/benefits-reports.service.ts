@@ -842,7 +842,9 @@ export class BenefitsReportsService {
 
     const leaveWorkingSheet = await this.getLeaveWorkingSheet(year);
 
-    const sourceEmployees = leaveWorkingSheet.data.employees;
+    const sourceEmployees = leaveWorkingSheet.data.employees.filter(
+      (employee) => employee.status === 'QUALIFIED',
+    );
 
     const employeeIds = sourceEmployees.map((employee) => employee.employeeId);
 
@@ -958,7 +960,9 @@ export class BenefitsReportsService {
     const leaveWorkingSheet = await this.getLeaveWorkingSheet(dto.year);
 
     const eligibleEmployeeIds = new Set(
-      leaveWorkingSheet.data.employees.map((employee) => employee.employeeId),
+      leaveWorkingSheet.data.employees
+        .filter((employee) => employee.status === 'QUALIFIED')
+        .map((employee) => employee.employeeId),
     );
 
     const invalidEmployeeIds = dto.employeeIds.filter(
