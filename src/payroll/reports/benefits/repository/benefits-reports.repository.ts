@@ -11,6 +11,61 @@ export class BenefitsReportsRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   // =========================================================
+  // BONUS SETTING
+  //
+  // One common capping amount belongs to one financial year.
+  //
+  // financialYear stores the starting year:
+  // 2025 = FY 2025-2026.
+  // =========================================================
+
+  async findBonusSetting(financialYear: number) {
+    return this.prisma.bonusSetting.findUnique({
+      where: {
+        financialYear,
+      },
+    });
+  }
+
+  async upsertBonusSettingAmount(
+    financialYear: number,
+    cappingAmount: number,
+  ) {
+    return this.prisma.bonusSetting.upsert({
+      where: {
+        financialYear,
+      },
+
+      create: {
+        financialYear,
+        cappingAmount,
+        isLocked: false,
+        lockedAt: null,
+      },
+
+      update: {
+        cappingAmount,
+      },
+    });
+  }
+
+  async updateBonusSettingLock(
+    financialYear: number,
+    isLocked: boolean,
+    lockedAt: Date | null,
+  ) {
+    return this.prisma.bonusSetting.update({
+      where: {
+        financialYear,
+      },
+
+      data: {
+        isLocked,
+        lockedAt,
+      },
+    });
+  }
+  // =========================================================
   // LEAVE WORKING SHEET - ANNUAL PAYROLL SNAPSHOTS
   //
   // Source of truth:
@@ -97,6 +152,7 @@ export class BenefitsReportsRepository {
 
             monthlyBasic: true,
             monthlyDa: true,
+            wages: true,
 
             employee: {
               select: {

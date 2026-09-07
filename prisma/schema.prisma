@@ -496,6 +496,34 @@ enum LeavePaymentMode {
   CHEQUE
 }
 
+// =========================================================
+// BONUS SETTING
+//
+// Stores the common Bonus capping amount for one financial
+// year.
+//
+// financialYear stores the starting year:
+// 2025 = FY 2025-2026.
+//
+// The capping amount must be locked before Bonus Working
+// Sheet generation is allowed.
+//
+// Unlocking permits HR to change the capping amount.
+// =========================================================
+
+model BonusSetting {
+  id            Int @id @default(autoincrement())
+  financialYear Int @unique
+
+  cappingAmount Decimal @db.Decimal(14, 2)
+
+  isLocked Boolean   @default(false)
+  lockedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 enum AttendanceStatus {
   PRESENT
   ABSENT
