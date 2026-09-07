@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { UpdateLeavePaymentsDto } from './dto/update-leave-payments.dto';
 import { BenefitsReportsRepository } from './repository/benefits-reports.repository';
 
 @Injectable()
@@ -563,7 +564,29 @@ export class BenefitsReportsService {
       (a, b) => a.employeeId - b.employeeId,
     );
 
+    const leavePayments =
+      await this.benefitsReportsRepository.findLeavePaymentsForYear(
+        year,
+        employeeContexts.map((employee) => employee.employeeId),
+      );
+
+    const leavePaymentByEmployeeId = new Map(
+      leavePayments.map((payment) => [payment.employeeId, payment]),
+    );
+
     const employees = employeeContexts.map((employee, index) => {
+      const leavePayment = leavePaymentByEmployeeId.get(employee.employeeId);
+
+      const paymentRemark =
+        leavePayment?.status === 'PAID' && leavePayment.paymentDate
+          ? `Paid - ${String(leavePayment.paymentDate.getUTCDate()).padStart(
+              2,
+              '0',
+            )}/${String(leavePayment.paymentDate.getUTCMonth() + 1).padStart(
+              2,
+              '0',
+            )}/${leavePayment.paymentDate.getUTCFullYear()}`
+          : null;
       const latestWorkedMonth = [...employee.months]
         .reverse()
         .find(
@@ -757,7 +780,7 @@ export class BenefitsReportsService {
           cashEquivalent:
             this.roundValue(rawTotalCashEquivalent),
 
-          remark: null,
+          remark: paymentRemark,
         },
       };
     });
@@ -795,6 +818,189 @@ export class BenefitsReportsService {
         },
 
         employees,
+      },
+    };
+  }
+
+  // =========================================================
+  // LEAVE PAY BANK TRANSFER STATEMENT
+  //
+  // Employee inclusion and Amount use the already-established
+  // Leave Working Sheet annual calculation.
+  //
+  // Amount =
+  // Leave Working Sheet ROUND VALUE.
+  //
+  // Payment state is persisted separately in LeavePayment
+  // using Employee + Leave Year.
+  //
+  // Absence of LeavePayment = UNPAID.
+  // =========================================================
+
+  async getLeavePayBankTransfer(year: number) {
+    this.validateYear(year);
+
+    const leaveWorkingSheet = await this.getLeaveWorkingSheet(year);
+
+    const sourceEmployees = leaveWorkingSheet.data.employees;
+
+    const employeeIds = sourceEmployees.map((employee) => employee.employeeId);
+
+    const leavePayments =
+      await this.benefitsReportsRepository.findLeavePaymentsForYear(
+        year,
+        employeeIds,
+      );
+
+    const paymentByEmployeeId = new Map(
+      leavePayments.map((payment) => [payment.employeeId, payment]),
+    );
+
+    const employees = sourceEmployees.map((employee, index) => {
+      const payment = paymentByEmployeeId.get(employee.employeeId);
+
+      return {
+        serialNumber: index + 1,
+
+        employeeId: employee.employeeId,
+
+        employeeName: employee.employeeName,
+
+        bankName: employee.bankDetails.bankName,
+
+        bankBranch: employee.bankDetails.bankBranch,
+
+        ifscCode: employee.bankDetails.ifscCode,
+
+        accountNumber: employee.bankDetails.accountNumber,
+
+        amount: employee.roundValue,
+
+        status: payment?.status ?? 'UNPAID',
+
+        paymentDate: payment?.paymentDate ?? null,
+
+        paymentMode: payment?.paymentMode ?? null,
+      };
+    });
+
+    const totalAmount = employees.reduce(
+      (total, employee) => total + employee.amount,
+      0,
+    );
+
+    return {
+      success: true,
+
+      message: 'Leave Pay Bank Transfer Statement fetched successfully.',
+
+      data: {
+        report: {
+          type: 'LEAVE_PAY_BANK_TRANSFER_STATEMENT',
+
+          year,
+
+          employeeCount: employees.length,
+        },
+
+        employees,
+
+        totals: {
+          amount: totalAmount,
+        },
+      },
+    };
+  }
+
+  // =========================================================
+  // LEAVE PAYMENT UPDATE
+  //
+  // Supports one employee or multiple selected employees.
+  //
+  // Entire request is validated before any write.
+  // If one selected employee is not eligible for the selected
+  // leave year, the complete request is rejected.
+  //
+  // PAID:
+  // paymentDate + paymentMode required.
+  //
+  // UNPAID:
+  // paymentDate + paymentMode must not be supplied and any
+  // previously stored values are cleared.
+  // =========================================================
+
+  async updateLeavePayments(dto: UpdateLeavePaymentsDto) {
+    this.validateYear(dto.year);
+
+    if (dto.status === 'PAID') {
+      if (!dto.paymentDate) {
+        throw new BadRequestException(
+          'Payment Date is required when Leave Payment status is PAID.',
+        );
+      }
+
+      if (!dto.paymentMode) {
+        throw new BadRequestException(
+          'Payment Mode is required when Leave Payment status is PAID.',
+        );
+      }
+    }
+
+    if (
+      dto.status === 'UNPAID' &&
+      (dto.paymentDate !== undefined || dto.paymentMode !== undefined)
+    ) {
+      throw new BadRequestException(
+        'Payment Date and Payment Mode must not be provided when Leave Payment status is UNPAID.',
+      );
+    }
+
+    const leaveWorkingSheet = await this.getLeaveWorkingSheet(dto.year);
+
+    const eligibleEmployeeIds = new Set(
+      leaveWorkingSheet.data.employees.map((employee) => employee.employeeId),
+    );
+
+    const invalidEmployeeIds = dto.employeeIds.filter(
+      (employeeId) => !eligibleEmployeeIds.has(employeeId),
+    );
+
+    if (invalidEmployeeIds.length > 0) {
+      throw new BadRequestException(
+        `Employee ID(s) not eligible for Leave Pay in year ${dto.year}: ${invalidEmployeeIds.join(', ')}.`,
+      );
+    }
+
+    let paymentDate: Date | null = null;
+
+    if (dto.status === 'PAID' && dto.paymentDate) {
+      paymentDate = new Date(dto.paymentDate);
+
+      if (Number.isNaN(paymentDate.getTime())) {
+        throw new BadRequestException('Payment Date is invalid.');
+      }
+    }
+
+    const updatedPayments =
+      await this.benefitsReportsRepository.upsertLeavePayments({
+        leaveYear: dto.year,
+        employeeIds: dto.employeeIds,
+        status: dto.status,
+        paymentDate,
+        paymentMode: dto.status === 'PAID' ? (dto.paymentMode ?? null) : null,
+      });
+
+    return {
+      success: true,
+
+      message: 'Leave Payment status updated successfully.',
+
+      data: {
+        year: dto.year,
+
+        updatedCount: updatedPayments.length,
+
+        payments: updatedPayments,
       },
     };
   }

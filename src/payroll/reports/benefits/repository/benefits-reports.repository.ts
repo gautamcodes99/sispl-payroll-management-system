@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { PayrollRunStatus } from '@prisma/client';
+import {
+  LeavePaymentMode,
+  LeavePaymentStatus,
+  PayrollRunStatus,
+} from '@prisma/client';
 import { PrismaService } from '../../../../prisma/prisma.service';
 
 @Injectable()
@@ -105,5 +109,93 @@ export class BenefitsReportsRepository {
         },
       },
     });
+  }
+
+  // =========================================================
+  // LEAVE PAYMENT
+  //
+  // Annual payment state belongs to:
+  // Employee + Leave Year.
+  //
+  // Absence of a LeavePayment record is treated by the
+  // Service layer as UNPAID.
+  // =========================================================
+
+  async findLeavePaymentsForYear(leaveYear: number, employeeIds: number[]) {
+    if (employeeIds.length === 0) {
+      return [];
+    }
+
+    return this.prisma.leavePayment.findMany({
+      where: {
+        leaveYear,
+        employeeId: {
+          in: employeeIds,
+        },
+      },
+
+      orderBy: {
+        employeeId: 'asc',
+      },
+
+      select: {
+        id: true,
+        employeeId: true,
+        leaveYear: true,
+        status: true,
+        paymentDate: true,
+        paymentMode: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+  }
+
+  async upsertLeavePayments(params: {
+    leaveYear: number;
+    employeeIds: number[];
+    status: LeavePaymentStatus;
+    paymentDate: Date | null;
+    paymentMode: LeavePaymentMode | null;
+  }) {
+    const { leaveYear, employeeIds, status, paymentDate, paymentMode } = params;
+
+    return this.prisma.$transaction(
+      employeeIds.map((employeeId) =>
+        this.prisma.leavePayment.upsert({
+          where: {
+            employeeId_leaveYear: {
+              employeeId,
+              leaveYear,
+            },
+          },
+
+          create: {
+            employeeId,
+            leaveYear,
+            status,
+            paymentDate,
+            paymentMode,
+          },
+
+          update: {
+            status,
+            paymentDate,
+            paymentMode,
+          },
+
+          select: {
+            id: true,
+            employeeId: true,
+            leaveYear: true,
+            status: true,
+            paymentDate: true,
+            paymentMode: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        }),
+      ),
+    );
   }
 }

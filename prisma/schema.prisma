@@ -48,6 +48,7 @@ model Employee {
   variableAllowances VariableAllowance[]
   manualDeductions   ManualDeduction[]
   payrollSnapshots   PayrollEmployeeSnapshot[]
+  leavePayments      LeavePayment[]
 }
 
 model Site {
@@ -450,6 +451,48 @@ enum PayrollPaymentStatus {
 
 enum PayrollPaymentMode {
   BANK_TRANSFER
+  CHEQUE
+}
+
+// =========================================================
+// LEAVE PAYMENT
+//
+// Stores annual leave encashment payment information for
+// one Employee + Leave Year.
+//
+// The calculated leave amount remains derived from the
+// Benefit Reports annual payroll snapshot calculation.
+//
+// Absence of a LeavePayment record is treated as UNPAID.
+// =========================================================
+
+model LeavePayment {
+  id         Int @id @default(autoincrement())
+  employeeId Int
+  leaveYear  Int
+
+  status      LeavePaymentStatus @default(UNPAID)
+  paymentDate DateTime?
+  paymentMode LeavePaymentMode?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@unique([employeeId, leaveYear])
+  @@index([leaveYear, status])
+}
+
+enum LeavePaymentStatus {
+  UNPAID
+  PAID
+}
+
+enum LeavePaymentMode {
+  NEFT
+  CMS
+  NET_BANKING
   CHEQUE
 }
 

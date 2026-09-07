@@ -1,7 +1,9 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Query } from '@nestjs/common';
 import { BenefitsReportsService } from './benefits-reports.service';
 import { Form20QueryDto } from './dto/form-20-query.dto';
+import { LeavePayBankTransferQueryDto } from './dto/leave-pay-bank-transfer-query.dto';
 import { LeaveWorkingSheetQueryDto } from './dto/leave-working-sheet-query.dto';
+import { UpdateLeavePaymentsDto } from './dto/update-leave-payments.dto';
 
 @Controller('benefit-reports')
 export class BenefitsReportsController {
@@ -17,5 +19,15 @@ export class BenefitsReportsController {
   @Get('form-20')
   async getForm20(@Query() query: Form20QueryDto) {
     return this.benefitsReportsService.getForm20(query.year);
+  }
+
+  @Get('leave-pay-bank-transfer')
+  async getLeavePayBankTransfer(@Query() query: LeavePayBankTransferQueryDto) {
+    return this.benefitsReportsService.getLeavePayBankTransfer(query.year);
+  }
+
+  @Patch('leave-payments')
+  async updateLeavePayments(@Body() dto: UpdateLeavePaymentsDto) {
+    return this.benefitsReportsService.updateLeavePayments(dto);
   }
 }
