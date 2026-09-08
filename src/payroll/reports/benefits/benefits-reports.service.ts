@@ -1449,9 +1449,10 @@ export class BenefitsReportsService {
 
       const rawBonus = rawAnnualBasicSalary * bonusRate;
 
-      const rawCappedBonus = qualified
-        ? Math.min(rawBonus, rawCappingAmount)
-        : 0;
+      const rawCappedBonus = Math.min(
+        rawBonus,
+        rawCappingAmount,
+      );
 
       const totalBonusPaid = this.roundValue(rawCappedBonus);
 
