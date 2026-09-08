@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
+  BonusPaymentMode,
+  BonusPaymentStatus,
   LeavePaymentMode,
   LeavePaymentStatus,
   PayrollRunStatus,
@@ -211,6 +213,59 @@ export class BenefitsReportsRepository {
         updatedAt: true,
       },
     });
+  }
+  async upsertBonusPayments(params: {
+    financialYear: number;
+    employeeIds: number[];
+    status: BonusPaymentStatus;
+    paymentDate: Date | null;
+    paymentMode: BonusPaymentMode | null;
+  }) {
+    const {
+      financialYear,
+      employeeIds,
+      status,
+      paymentDate,
+      paymentMode,
+    } = params;
+
+    return this.prisma.$transaction(
+      employeeIds.map((employeeId) =>
+        this.prisma.bonusPayment.upsert({
+          where: {
+            employeeId_financialYear: {
+              employeeId,
+              financialYear,
+            },
+          },
+
+          create: {
+            employeeId,
+            financialYear,
+            status,
+            paymentDate,
+            paymentMode,
+          },
+
+          update: {
+            status,
+            paymentDate,
+            paymentMode,
+          },
+
+          select: {
+            id: true,
+            employeeId: true,
+            financialYear: true,
+            status: true,
+            paymentDate: true,
+            paymentMode: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        }),
+      ),
+    );
   }
   // =========================================================
   // LEAVE PAYMENT

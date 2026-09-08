@@ -8,6 +8,7 @@ import {
   BonusSettingAction,
   UpdateBonusSettingDto,
 } from './dto/update-bonus-setting.dto';
+import { UpdateBonusPaymentsDto } from './dto/update-bonus-payments.dto';
 import { UpdateLeavePaymentsDto } from './dto/update-leave-payments.dto';
 import { BenefitsReportsRepository } from './repository/benefits-reports.repository';
 
@@ -1497,6 +1498,10 @@ export class BenefitsReportsService {
 
         bankName: employee.latestSnapshot.bankName,
 
+        bankBranch: employee.latestSnapshot.bankBranch,
+
+        ifscCode: employee.latestSnapshot.ifscCode,
+
         accountNumber: employee.latestSnapshot.accountNumber,
 
         status: qualified ? 'QUALIFIED' : 'UNQUALIFIED',
@@ -1607,6 +1612,236 @@ export class BenefitsReportsService {
 
           totalBonusPaid: totals.totalBonusPaid,
         },
+      },
+    };
+  }
+  // =========================================================
+  // BONUS BANK TRANSFER STATEMENT
+  //
+  // Source of truth:
+  // Bonus Working Sheet.
+  //
+  // Only QUALIFIED employees are included:
+  // paidDays >= 30.
+  //
+  // Amount =
+  // Bonus Working Sheet totalBonusPaid.
+  //
+  // Bank details come from the same latest FY payroll
+  // snapshot used by the Bonus Working Sheet.
+  //
+  // Payment state is shared through BonusPayment.
+  //
+  // Absence of BonusPayment = UNPAID.
+  // =========================================================
+
+  async getBonusBankTransfer(financialYear: number) {
+    this.validateYear(financialYear);
+
+    const bonusWorkingSheet =
+      await this.getBonusWorkingSheet(financialYear);
+
+    const sourceEmployees =
+      bonusWorkingSheet.data.employees.filter(
+        (employee) => employee.status === 'QUALIFIED',
+      );
+
+    const employeeIds = sourceEmployees.map(
+      (employee) => employee.employeeId,
+    );
+
+    const bonusPayments =
+      await this.benefitsReportsRepository.findBonusPaymentsForFinancialYear(
+        financialYear,
+        employeeIds,
+      );
+
+    const paymentByEmployeeId = new Map(
+      bonusPayments.map((payment) => [
+        payment.employeeId,
+        payment,
+      ]),
+    );
+
+    const employees = sourceEmployees.map(
+      (employee, index) => {
+        const payment = paymentByEmployeeId.get(
+          employee.employeeId,
+        );
+
+        return {
+          serialNumber: index + 1,
+
+          employeeId: employee.employeeId,
+
+          employeeName: employee.employeeName,
+
+          bankName: employee.bankName,
+
+          bankBranch: employee.bankBranch,
+
+          ifscCode: employee.ifscCode,
+
+          accountNumber: employee.accountNumber,
+
+          amount: employee.totalBonusPaid,
+
+          status: payment?.status ?? 'UNPAID',
+
+          paymentDate:
+            payment?.status === 'PAID'
+              ? (payment.paymentDate ?? null)
+              : null,
+
+          paymentMode:
+            payment?.status === 'PAID'
+              ? (payment.paymentMode ?? null)
+              : null,
+        };
+      },
+    );
+
+    const totalAmount = employees.reduce(
+      (total, employee) => total + employee.amount,
+      0,
+    );
+
+    return {
+      success: true,
+
+      message:
+        'Bonus Bank Transfer Statement fetched successfully.',
+
+      data: {
+        report: {
+          type: 'BONUS_BANK_TRANSFER_STATEMENT',
+
+          financialYear,
+
+          financialYearLabel:
+            `${financialYear}-${financialYear + 1}`,
+
+          employeeCount: employees.length,
+        },
+
+        employees,
+
+        totals: {
+          amount: totalAmount,
+        },
+      },
+    };
+  }
+
+  // =========================================================
+  // BONUS PAYMENT UPDATE
+  //
+  // Supports one employee or multiple selected employees.
+  //
+  // Entire request is validated before any write.
+  // If one selected employee is not QUALIFIED for the
+  // selected financial year, the complete request is rejected.
+  //
+  // PAID:
+  // paymentDate + paymentMode required.
+  //
+  // UNPAID:
+  // paymentDate + paymentMode must not be supplied and any
+  // previously stored values are cleared.
+  //
+  // BonusPayment is shared by Bonus Bank Transfer + Form-C.
+  // =========================================================
+
+  async updateBonusPayments(dto: UpdateBonusPaymentsDto) {
+    this.validateYear(dto.financialYear);
+
+    if (dto.status === 'PAID') {
+      if (!dto.paymentDate) {
+        throw new BadRequestException(
+          'Payment Date is required when Bonus Payment status is PAID.',
+        );
+      }
+
+      if (!dto.paymentMode) {
+        throw new BadRequestException(
+          'Payment Mode is required when Bonus Payment status is PAID.',
+        );
+      }
+    }
+
+    if (
+      dto.status === 'UNPAID' &&
+      (dto.paymentDate !== undefined ||
+        dto.paymentMode !== undefined)
+    ) {
+      throw new BadRequestException(
+        'Payment Date and Payment Mode must not be provided when Bonus Payment status is UNPAID.',
+      );
+    }
+
+    const bonusWorkingSheet =
+      await this.getBonusWorkingSheet(dto.financialYear);
+
+    const eligibleEmployeeIds = new Set(
+      bonusWorkingSheet.data.employees
+        .filter(
+          (employee) => employee.status === 'QUALIFIED',
+        )
+        .map((employee) => employee.employeeId),
+    );
+
+    const invalidEmployeeIds = dto.employeeIds.filter(
+      (employeeId) => !eligibleEmployeeIds.has(employeeId),
+    );
+
+    if (invalidEmployeeIds.length > 0) {
+      throw new BadRequestException(
+        `Employee ID(s) not eligible for Bonus Payment in FY ${dto.financialYear}-${dto.financialYear + 1}: ${invalidEmployeeIds.join(', ')}.`,
+      );
+    }
+
+    let paymentDate: Date | null = null;
+
+    if (dto.status === 'PAID' && dto.paymentDate) {
+      paymentDate = new Date(dto.paymentDate);
+
+      if (Number.isNaN(paymentDate.getTime())) {
+        throw new BadRequestException(
+          'Payment Date is invalid.',
+        );
+      }
+    }
+
+    const updatedPayments =
+      await this.benefitsReportsRepository.upsertBonusPayments({
+        financialYear: dto.financialYear,
+
+        employeeIds: dto.employeeIds,
+
+        status: dto.status,
+
+        paymentDate,
+
+        paymentMode:
+          dto.status === 'PAID'
+            ? (dto.paymentMode ?? null)
+            : null,
+      });
+
+    return {
+      success: true,
+
+      message: 'Bonus Payment status updated successfully.',
+
+      data: {
+        financialYear: dto.financialYear,
+
+        financialYearLabel:
+          `${dto.financialYear}-${dto.financialYear + 1}`,
+
+        updatedCount: updatedPayments.length,
+
+        payments: updatedPayments,
       },
     };
   }

@@ -1,11 +1,13 @@
 import { Body, Controller, Get, Patch, Query } from '@nestjs/common';
 import { BenefitsReportsService } from './benefits-reports.service';
+import { BonusBankTransferQueryDto } from './dto/bonus-bank-transfer-query.dto';
 import { BonusFormCQueryDto } from './dto/bonus-form-c-query.dto';
 import { BonusSettingQueryDto } from './dto/bonus-setting-query.dto';
 import { BonusWorkingSheetQueryDto } from './dto/bonus-working-sheet-query.dto';
 import { Form20QueryDto } from './dto/form-20-query.dto';
 import { LeavePayBankTransferQueryDto } from './dto/leave-pay-bank-transfer-query.dto';
 import { LeaveWorkingSheetQueryDto } from './dto/leave-working-sheet-query.dto';
+import { UpdateBonusPaymentsDto } from './dto/update-bonus-payments.dto';
 import { UpdateBonusSettingDto } from './dto/update-bonus-setting.dto';
 import { UpdateLeavePaymentsDto } from './dto/update-leave-payments.dto';
 
@@ -46,6 +48,18 @@ export class BenefitsReportsController {
     return this.benefitsReportsService.getBonusFormC(
       query.financialYear,
     );
+  }
+
+  @Get('bonus-bank-transfer')
+  async getBonusBankTransfer(@Query() query: BonusBankTransferQueryDto) {
+    return this.benefitsReportsService.getBonusBankTransfer(
+      query.financialYear,
+    );
+  }
+
+  @Patch('bonus-payments')
+  async updateBonusPayments(@Body() dto: UpdateBonusPaymentsDto) {
+    return this.benefitsReportsService.updateBonusPayments(dto);
   }
 
   @Get('bonus-setting')
