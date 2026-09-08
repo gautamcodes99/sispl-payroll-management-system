@@ -1250,9 +1250,11 @@ export class BenefitsReportsService {
   // ANNUAL BASIC SALRAY * 8.33%
   //
   // TOTAL BONUS PAID =
-  // QUALIFIED
-  //   ? min(RAW BONUS, locked FY capping amount)
-  //   : 0
+  // min(RAW BONUS, locked FY capping amount)
+  //
+  // Qualification controls STATUS only.
+  // Both QUALIFIED and UNQUALIFIED employees retain their
+  // calculated Bonus Working Sheet amount.
   //
   // Final TOTAL BONUS PAID is rounded to the nearest rupee.
   //
@@ -1604,6 +1606,238 @@ export class BenefitsReportsService {
           rawBonus: this.roundTwo(totals.rawBonus),
 
           totalBonusPaid: totals.totalBonusPaid,
+        },
+      },
+    };
+  }
+  // =========================================================
+  // BONUS FORM-C
+  //
+  // Source of truth:
+  // Bonus Working Sheet.
+  //
+  // Only QUALIFIED employees are included:
+  // paidDays >= 30.
+  //
+  // Bonus payable comes from the existing Bonus Working
+  // Sheet totalBonusPaid value.
+  //
+  // Current deductions are zero.
+  //
+  // Payment state is shared through BonusPayment.
+  //
+  // No BonusPayment record is treated as UNPAID.
+  //
+  // UNPAID:
+  // amountActuallyPaid = 0
+  // paymentDate = null
+  //
+  // PAID:
+  // amountActuallyPaid = netAmountPayable
+  // paymentDate = BonusPayment.paymentDate
+  //
+  // Remarks remain blank.
+  // =========================================================
+
+  async getBonusFormC(financialYear: number) {
+    this.validateYear(financialYear);
+
+    const bonusWorkingSheet =
+      await this.getBonusWorkingSheet(financialYear);
+
+    const qualifiedEmployees =
+      bonusWorkingSheet.data.employees.filter(
+        (employee) => employee.status === 'QUALIFIED',
+      );
+
+    const employeeIds = qualifiedEmployees.map(
+      (employee) => employee.employeeId,
+    );
+
+    const bonusPayments =
+      await this.benefitsReportsRepository.findBonusPaymentsForFinancialYear(
+        financialYear,
+        employeeIds,
+      );
+
+    const paymentByEmployeeId = new Map(
+      bonusPayments.map((payment) => [
+        payment.employeeId,
+        payment,
+      ]),
+    );
+
+    const employees = qualifiedEmployees.map(
+      (employee, index) => {
+        const payment = paymentByEmployeeId.get(
+          employee.employeeId,
+        );
+
+        const isPaid = payment?.status === 'PAID';
+
+        const bonusPayable = employee.totalBonusPaid;
+
+        const pujaCustomaryBonus = 0;
+        const interimAdvanceBonus = 0;
+        const incomeTaxDeducted = 0;
+        const financialLossDeduction = 0;
+
+        const totalDeduction =
+          interimAdvanceBonus +
+          incomeTaxDeducted +
+          financialLossDeduction;
+
+        const netAmountPayable =
+          bonusPayable - totalDeduction;
+
+        return {
+          serialNumber: index + 1,
+
+          employeeId: employee.employeeId,
+
+          employeeName: employee.employeeName,
+
+          completed15Years: 'YES',
+
+          daysWorked: employee.paidDays,
+
+          totalSalaryOrWages:
+            employee.annualBasicSalary,
+
+          bonusPayable,
+
+          pujaCustomaryBonus,
+
+          interimAdvanceBonus,
+
+          incomeTaxDeducted,
+
+          financialLossDeduction,
+
+          totalDeduction,
+
+          netAmountPayable,
+
+          amountActuallyPaid:
+            isPaid ? netAmountPayable : 0,
+
+          paymentDate:
+            isPaid && payment?.paymentDate
+              ? payment.paymentDate
+              : null,
+
+          bankName: employee.bankName,
+
+          accountNumber: employee.accountNumber,
+
+          remarks: null,
+        };
+      },
+    );
+
+    const totals = employees.reduce(
+      (result, employee) => {
+        result.daysWorked += employee.daysWorked;
+
+        result.totalSalaryOrWages +=
+          employee.totalSalaryOrWages;
+
+        result.bonusPayable +=
+          employee.bonusPayable;
+
+        result.pujaCustomaryBonus +=
+          employee.pujaCustomaryBonus;
+
+        result.interimAdvanceBonus +=
+          employee.interimAdvanceBonus;
+
+        result.incomeTaxDeducted +=
+          employee.incomeTaxDeducted;
+
+        result.financialLossDeduction +=
+          employee.financialLossDeduction;
+
+        result.totalDeduction +=
+          employee.totalDeduction;
+
+        result.netAmountPayable +=
+          employee.netAmountPayable;
+
+        result.amountActuallyPaid +=
+          employee.amountActuallyPaid;
+
+        return result;
+      },
+      {
+        daysWorked: 0,
+        totalSalaryOrWages: 0,
+        bonusPayable: 0,
+        pujaCustomaryBonus: 0,
+        interimAdvanceBonus: 0,
+        incomeTaxDeducted: 0,
+        financialLossDeduction: 0,
+        totalDeduction: 0,
+        netAmountPayable: 0,
+        amountActuallyPaid: 0,
+      },
+    );
+
+    return {
+      success: true,
+
+      message: 'Bonus Form-C fetched successfully.',
+
+      data: {
+        report: {
+          type: 'BONUS_FORM_C',
+
+          financialYear,
+
+          financialYearLabel:
+            `${financialYear}-${financialYear + 1}`,
+
+          accountingYearEnding:
+            new Date(
+              Date.UTC(financialYear + 1, 2, 31),
+            ),
+
+          employeeCount: employees.length,
+        },
+
+        employees,
+
+        totals: {
+          daysWorked:
+            this.roundTwo(totals.daysWorked),
+
+          totalSalaryOrWages:
+            this.roundTwo(
+              totals.totalSalaryOrWages,
+            ),
+
+          bonusPayable:
+            totals.bonusPayable,
+
+          pujaCustomaryBonus:
+            totals.pujaCustomaryBonus,
+
+          interimAdvanceBonus:
+            totals.interimAdvanceBonus,
+
+          incomeTaxDeducted:
+            totals.incomeTaxDeducted,
+
+          financialLossDeduction:
+            totals.financialLossDeduction,
+
+          totalDeduction:
+            totals.totalDeduction,
+
+          netAmountPayable:
+            totals.netAmountPayable,
+
+          amountActuallyPaid:
+            totals.amountActuallyPaid,
         },
       },
     };

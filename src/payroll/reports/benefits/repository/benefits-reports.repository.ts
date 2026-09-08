@@ -168,6 +168,51 @@ export class BenefitsReportsRepository {
   }
 
   // =========================================================
+  // BONUS PAYMENT
+  //
+  // Annual payment state belongs to:
+  // Employee + Financial Year.
+  //
+  // Absence of a BonusPayment record is treated by the
+  // Service layer as UNPAID.
+  //
+  // Form-C reads this shared payment source.
+  // The Bonus Bank Transfer workflow will update it later.
+  // =========================================================
+
+  async findBonusPaymentsForFinancialYear(
+    financialYear: number,
+    employeeIds: number[],
+  ) {
+    if (employeeIds.length === 0) {
+      return [];
+    }
+
+    return this.prisma.bonusPayment.findMany({
+      where: {
+        financialYear,
+        employeeId: {
+          in: employeeIds,
+        },
+      },
+
+      orderBy: {
+        employeeId: 'asc',
+      },
+
+      select: {
+        id: true,
+        employeeId: true,
+        financialYear: true,
+        status: true,
+        paymentDate: true,
+        paymentMode: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+  }
+  // =========================================================
   // LEAVE PAYMENT
   //
   // Annual payment state belongs to:
@@ -176,7 +221,6 @@ export class BenefitsReportsRepository {
   // Absence of a LeavePayment record is treated by the
   // Service layer as UNPAID.
   // =========================================================
-
   async findLeavePaymentsForYear(leaveYear: number, employeeIds: number[]) {
     if (employeeIds.length === 0) {
       return [];

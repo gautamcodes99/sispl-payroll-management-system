@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Patch, Query } from '@nestjs/common';
 import { BenefitsReportsService } from './benefits-reports.service';
+import { BonusFormCQueryDto } from './dto/bonus-form-c-query.dto';
 import { BonusSettingQueryDto } from './dto/bonus-setting-query.dto';
 import { BonusWorkingSheetQueryDto } from './dto/bonus-working-sheet-query.dto';
 import { Form20QueryDto } from './dto/form-20-query.dto';
@@ -40,6 +41,13 @@ export class BenefitsReportsController {
       query.financialYear,
     );
   }
+  @Get('bonus-form-c')
+  async getBonusFormC(@Query() query: BonusFormCQueryDto) {
+    return this.benefitsReportsService.getBonusFormC(
+      query.financialYear,
+    );
+  }
+
   @Get('bonus-setting')
   async getBonusSetting(@Query() query: BonusSettingQueryDto) {
     return this.benefitsReportsService.getBonusSetting(query.financialYear);

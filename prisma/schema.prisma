@@ -49,6 +49,7 @@ model Employee {
   manualDeductions   ManualDeduction[]
   payrollSnapshots   PayrollEmployeeSnapshot[]
   leavePayments      LeavePayment[]
+  bonusPayments      BonusPayment[]
 }
 
 model Site {
@@ -522,6 +523,51 @@ model BonusSetting {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// =========================================================
+// BONUS PAYMENT
+//
+// Stores annual Bonus payment information for one
+// Employee + Financial Year.
+//
+// financialYear stores the starting year:
+// 2025 = FY 2025-2026.
+//
+// The calculated Bonus amount remains derived from the
+// Bonus Working Sheet.
+//
+// Absence of a BonusPayment record is treated as UNPAID.
+// =========================================================
+
+model BonusPayment {
+  id            Int @id @default(autoincrement())
+  employeeId    Int
+  financialYear Int
+
+  status      BonusPaymentStatus @default(UNPAID)
+  paymentDate DateTime?
+  paymentMode BonusPaymentMode?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@unique([employeeId, financialYear])
+  @@index([financialYear, status])
+}
+
+enum BonusPaymentStatus {
+  UNPAID
+  PAID
+}
+
+enum BonusPaymentMode {
+  NEFT
+  CMS
+  NET_BANKING
+  CHEQUE
 }
 
 enum AttendanceStatus {
