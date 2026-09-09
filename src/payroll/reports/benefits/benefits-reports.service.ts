@@ -2220,6 +2220,57 @@ export class BenefitsReportsService {
     };
   }
 
+  async getFnFSettlementEmployees(month: string) {
+    const parsedMonth = new Date(month);
+
+    if (Number.isNaN(parsedMonth.getTime())) {
+      throw new BadRequestException('Month is invalid.');
+    }
+
+    const monthStart = new Date(
+      Date.UTC(
+        parsedMonth.getUTCFullYear(),
+        parsedMonth.getUTCMonth(),
+        1,
+      ),
+    );
+
+    const nextMonthStart = new Date(
+      Date.UTC(
+        parsedMonth.getUTCFullYear(),
+        parsedMonth.getUTCMonth() + 1,
+        1,
+      ),
+    );
+
+    const employees =
+      await this.benefitsReportsRepository.findFnFEmployeesByLeavingMonth(
+        monthStart,
+        nextMonthStart,
+      );
+
+    return {
+      success: true,
+      message: 'F&F Settlement employees fetched successfully.',
+      data: {
+        report: {
+          type: 'FNF_SETTLEMENT_EMPLOYEES',
+          month: monthStart,
+          employeeCount: employees.length,
+        },
+
+        employees: employees.map((employee, index) => ({
+          serialNumber: index + 1,
+          employeeId: employee.id,
+          employeeName: `${employee.firstName} ${employee.lastName}`.trim(),
+          joiningDate: employee.joiningDate,
+          leftDate: employee.leftDate,
+          status: employee.status,
+        })),
+      },
+    };
+  }
+
   async getFnFSettlement(employeeId: number) {
     const employee =
       await this.benefitsReportsRepository.findFnFEmployee(
@@ -2445,7 +2496,7 @@ export class BenefitsReportsService {
         otherPermissibleDeduction,
     );
 
-    const totalAmountPayable = this.roundTwo(
+    const totalAmountPayable = Math.round(
       grossAmountPayable -
         grossAmountToBeDeducted,
     );

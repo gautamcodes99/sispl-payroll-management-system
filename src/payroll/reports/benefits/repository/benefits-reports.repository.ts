@@ -370,6 +370,34 @@ export class BenefitsReportsRepository {
   // All other F&F values remain derived.
   // =========================================================
 
+  async findFnFEmployeesByLeavingMonth(
+    monthStart: Date,
+    nextMonthStart: Date,
+  ) {
+    return this.prisma.employee.findMany({
+      where: {
+        leftDate: {
+          gte: monthStart,
+          lt: nextMonthStart,
+        },
+      },
+
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        joiningDate: true,
+        leftDate: true,
+        status: true,
+      },
+
+      orderBy: [
+        { leftDate: 'asc' },
+        { id: 'asc' },
+      ],
+    });
+  }
+
   async findFnFEmployee(employeeId: number) {
     return this.prisma.employee.findUnique({
       where: {

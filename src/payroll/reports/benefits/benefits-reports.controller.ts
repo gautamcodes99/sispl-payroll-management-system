@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Patch, Query } from '@nestjs/common';
 import { BenefitsReportsService } from './benefits-reports.service';
+import { FnFSettlementEmployeesQueryDto } from './dto/fnf-settlement-employees-query.dto';
 import { FnFSettlementQueryDto } from './dto/fnf-settlement-query.dto';
 import { UpdateFnFSettlementDto } from './dto/update-fnf-settlement.dto';
 import { BonusBankTransferQueryDto } from './dto/bonus-bank-transfer-query.dto';
@@ -77,6 +78,15 @@ export class BenefitsReportsController {
   // =========================================================
   // FULL AND FINAL SETTLEMENT
   // =========================================================
+
+  @Get('fnf-settlement-employees')
+  async getFnFSettlementEmployees(
+    @Query() query: FnFSettlementEmployeesQueryDto,
+  ) {
+    return this.benefitsReportsService.getFnFSettlementEmployees(
+      query.month,
+    );
+  }
 
   @Get('fnf-settlement')
   async getFnFSettlement(@Query() query: FnFSettlementQueryDto) {
