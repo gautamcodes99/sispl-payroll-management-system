@@ -10,6 +10,7 @@ import {
 } from './dto/update-bonus-setting.dto';
 import { UpdateBonusPaymentsDto } from './dto/update-bonus-payments.dto';
 import { UpdateLeavePaymentsDto } from './dto/update-leave-payments.dto';
+import { UpdateFnFSettlementDto } from './dto/update-fnf-settlement.dto';
 import { BenefitsReportsRepository } from './repository/benefits-reports.repository';
 
 @Injectable()
@@ -2076,5 +2077,525 @@ export class BenefitsReportsService {
         },
       },
     };
+  }
+
+  // =========================================================
+  // FULL AND FINAL SETTLEMENT
+  //
+  // Eligibility:
+  // Employee.leftDate must exist.
+  //
+  // Last Wages:
+  // Net Salary from the current reportable payroll snapshot
+  // for the employee's leaving month.
+  //
+  // Leave:
+  // Reuses the existing Leave Working Sheet calculation.
+  //
+  // Bonus:
+  // Reuses the existing Bonus Working Sheet calculation.
+  //
+  // Advance Recovery:
+  // Closing advance balance after processing the leaving month.
+  //
+  // Gratuity / Other Dues:
+  // Blank in the current F&F scope and therefore zero in the
+  // settlement calculation.
+  //
+  // Only Uniform/Shoes Recovery and Other Permissible
+  // Deduction are manually stored in FnFSettlement.
+  // =========================================================
+
+  private getFnFLeaveYear(leftDate: Date): number {
+    const year = leftDate.getUTCFullYear();
+    const month = leftDate.getUTCMonth();
+
+    // Jan-Mar belongs to the previous Leave Year.
+    return month <= 2 ? year - 1 : year;
+  }
+
+  private getFnFBonusFinancialYear(leftDate: Date): number {
+    const year = leftDate.getUTCFullYear();
+    const month = leftDate.getUTCMonth();
+
+    // Apr-Nov -> previous completed FY.
+    if (month >= 3 && month <= 10) {
+      return year - 1;
+    }
+
+    // Dec-Mar -> FY containing the leaving date.
+    return month >= 11 ? year : year - 1;
+  }
+
+  private calculateFnFAdvanceBalance(
+    history: Array<{
+      newAdvance: unknown;
+      numberOfInstallments: number;
+      advanceRecovery: unknown;
+    }>,
+  ): number {
+    let advanceBalance = 0;
+
+    for (const row of history) {
+      const newAdvance = this.number(row.newAdvance);
+      const advanceRecovery = this.number(row.advanceRecovery);
+
+      if (newAdvance > 0) {
+        advanceBalance += newAdvance;
+      }
+
+      // Preserve the established Manual Deduction ledger rule:
+      // legacy recovery rows cannot create a negative or phantom
+      // advance balance.
+      if (advanceRecovery > 0 && advanceBalance > 0) {
+        const actualRecovery = Math.min(
+          advanceRecovery,
+          advanceBalance,
+        );
+
+        advanceBalance -= actualRecovery;
+      }
+
+      if (advanceBalance <= 0) {
+        advanceBalance = 0;
+      }
+    }
+
+    return this.roundTwo(advanceBalance);
+  }
+
+  private formatFnFPaidRemark(
+    status: string | undefined,
+    paymentDate: Date | null | undefined,
+  ): string {
+    if (status !== 'PAID' || !paymentDate) {
+      return '';
+    }
+
+    const day = String(paymentDate.getUTCDate()).padStart(2, '0');
+    const month = String(paymentDate.getUTCMonth() + 1).padStart(2, '0');
+    const year = paymentDate.getUTCFullYear();
+
+    return `Paid: ${day}/${month}/${year}`;
+  }
+
+  private getFnFServicePeriod(
+    joiningDate: Date,
+    leftDate: Date,
+  ) {
+    let years =
+      leftDate.getUTCFullYear() -
+      joiningDate.getUTCFullYear();
+
+    let months =
+      leftDate.getUTCMonth() -
+      joiningDate.getUTCMonth();
+
+    let days =
+      leftDate.getUTCDate() -
+      joiningDate.getUTCDate();
+
+    if (days < 0) {
+      const previousMonthLastDay = new Date(
+        Date.UTC(
+          leftDate.getUTCFullYear(),
+          leftDate.getUTCMonth(),
+          0,
+        ),
+      ).getUTCDate();
+
+      days += previousMonthLastDay;
+      months -= 1;
+    }
+
+    if (months < 0) {
+      months += 12;
+      years -= 1;
+    }
+
+    return {
+      years: Math.max(0, years),
+      months: Math.max(0, months),
+      days: Math.max(0, days),
+    };
+  }
+
+  async getFnFSettlement(employeeId: number) {
+    const employee =
+      await this.benefitsReportsRepository.findFnFEmployee(
+        employeeId,
+      );
+
+    if (!employee) {
+      throw new NotFoundException(
+        `Employee with ID ${employeeId} not found.`,
+      );
+    }
+
+    if (!employee.leftDate) {
+      throw new BadRequestException(
+        `Employee with ID ${employeeId} is not eligible for F&F because Date of Leaving is not set.`,
+      );
+    }
+
+    const leftDate = employee.leftDate;
+
+    if (employee.joiningDate > leftDate) {
+      throw new BadRequestException(
+        'Employee Date of Joining cannot be later than Date of Leaving.',
+      );
+    }
+
+    const leavingMonthStart = new Date(
+      Date.UTC(
+        leftDate.getUTCFullYear(),
+        leftDate.getUTCMonth(),
+        1,
+      ),
+    );
+
+    const nextMonthStart = new Date(
+      Date.UTC(
+        leftDate.getUTCFullYear(),
+        leftDate.getUTCMonth() + 1,
+        1,
+      ),
+    );
+
+    const [
+      leavingMonthSnapshots,
+      historicalSnapshots,
+      advanceHistory,
+      savedSettlement,
+    ] = await Promise.all([
+      this.benefitsReportsRepository.findFnFLeavingMonthSnapshots(
+        employeeId,
+        leavingMonthStart,
+        nextMonthStart,
+      ),
+
+      this.benefitsReportsRepository.findFnFHistoricalSnapshotsThroughMonth(
+        employeeId,
+        nextMonthStart,
+      ),
+
+      this.benefitsReportsRepository.findFnFAdvanceHistoryThroughMonth(
+        employeeId,
+        nextMonthStart,
+      ),
+
+      this.benefitsReportsRepository.findFnFSettlement(
+        employeeId,
+      ),
+    ]);
+
+    const leavingMonthSnapshot =
+      leavingMonthSnapshots[0] ?? null;
+
+    const historicalSnapshot =
+      historicalSnapshots[0] ??
+      leavingMonthSnapshot ??
+      null;
+
+    if (!historicalSnapshot) {
+      throw new NotFoundException(
+        `No historical payroll snapshot found for employee ${employeeId} on or before the leaving month.`,
+      );
+    }
+
+    const leaveYear = this.getFnFLeaveYear(leftDate);
+
+    const bonusFinancialYear =
+      this.getFnFBonusFinancialYear(leftDate);
+
+    let leaveAmount = 0;
+    let leaveStatus = 'NOT_AVAILABLE';
+
+    try {
+      const leaveWorkingSheet =
+        await this.getLeaveWorkingSheet(leaveYear);
+
+      const leaveEmployee =
+        leaveWorkingSheet.data.employees.find(
+          (row) => row.employeeId === employeeId,
+        );
+
+      if (leaveEmployee) {
+        leaveStatus = leaveEmployee.status;
+
+        leaveAmount =
+          leaveStatus === 'QUALIFIED'
+            ? this.number(leaveEmployee.roundValue)
+            : 0;
+      }
+    } catch (error) {
+      if (!(error instanceof NotFoundException)) {
+        throw error;
+      }
+    }
+
+    let bonusAmount = 0;
+    let bonusStatus = 'NOT_AVAILABLE';
+
+    try {
+      const bonusWorkingSheet =
+        await this.getBonusWorkingSheet(
+          bonusFinancialYear,
+        );
+
+      const bonusEmployee =
+        bonusWorkingSheet.data.employees.find(
+          (row) => row.employeeId === employeeId,
+        );
+
+      if (bonusEmployee) {
+        bonusStatus = bonusEmployee.status;
+
+        bonusAmount =
+          bonusStatus === 'QUALIFIED'
+            ? this.number(bonusEmployee.totalBonusPaid)
+            : 0;
+      }
+    } catch (error) {
+      if (!(error instanceof NotFoundException)) {
+        throw error;
+      }
+    }
+
+    const [leavePayment, bonusPayment] =
+      await Promise.all([
+        this.benefitsReportsRepository.findFnFLeavePayment(
+          employeeId,
+          leaveYear,
+        ),
+
+        this.benefitsReportsRepository.findFnFBonusPayment(
+          employeeId,
+          bonusFinancialYear,
+        ),
+      ]);
+
+    const lastWages = leavingMonthSnapshot
+      ? this.number(leavingMonthSnapshot.netSalary)
+      : 0;
+
+    const lastWagesRemark = this.formatFnFPaidRemark(
+      leavingMonthSnapshot?.payment?.status,
+      leavingMonthSnapshot?.payment?.paymentDate,
+    );
+
+    const leavePaidRemark = this.formatFnFPaidRemark(
+      leavePayment?.status,
+      leavePayment?.paymentDate,
+    );
+
+    const bonusPaidRemark = this.formatFnFPaidRemark(
+      bonusPayment?.status,
+      bonusPayment?.paymentDate,
+    );
+
+    // Locked F&F Leave / Bonus rule:
+    //
+    // QUALIFIED:
+    // - PAID   -> include amount and show "Paid: DD/MM/YYYY".
+    // - UNPAID -> include amount and show "We will next year".
+    //
+    // UNQUALIFIED / NOT_AVAILABLE:
+    // - amount is zero in F&F.
+    // - remark remains blank.
+    //
+    // Qualification takes priority over any existing payment record.
+    const leaveRemark =
+      leaveStatus === 'QUALIFIED'
+        ? leavePaidRemark || 'We will next year'
+        : '';
+
+    const bonusRemark =
+      bonusStatus === 'QUALIFIED'
+        ? bonusPaidRemark || 'We will next year'
+        : '';
+
+    const advanceRecovery =
+      this.calculateFnFAdvanceBalance(
+        advanceHistory,
+      );
+
+    const uniformShoesRecovery = this.number(
+      savedSettlement?.uniformShoesRecovery,
+    );
+
+    const otherPermissibleDeduction = this.number(
+      savedSettlement?.otherPermissibleDeduction,
+    );
+
+    const gratuity = 0;
+    const otherDuesPayable = 0;
+
+    const grossAmountPayable = this.roundTwo(
+      lastWages +
+        leaveAmount +
+        bonusAmount +
+        gratuity +
+        otherDuesPayable,
+    );
+
+    const grossAmountToBeDeducted = this.roundTwo(
+      advanceRecovery +
+        uniformShoesRecovery +
+        otherPermissibleDeduction,
+    );
+
+    const totalAmountPayable = this.roundTwo(
+      grossAmountPayable -
+        grossAmountToBeDeducted,
+    );
+
+    const servicePeriod = this.getFnFServicePeriod(
+      employee.joiningDate,
+      leftDate,
+    );
+
+    return {
+      success: true,
+
+      message: 'F&F Settlement fetched successfully.',
+
+      data: {
+        report: {
+          type: 'FNF_SETTLEMENT',
+        },
+
+        employee: {
+          employeeId,
+          employeeName:
+            historicalSnapshot.employeeName,
+          uanNumber:
+            historicalSnapshot.uanNumber,
+          esicNumber:
+            historicalSnapshot.esicNumber,
+          designation:
+            historicalSnapshot.designationName,
+
+          joiningDate: employee.joiningDate,
+          leftDate,
+
+          servicePeriod,
+
+          lastDrawnBasic:
+            this.number(
+              historicalSnapshot.monthlyBasic,
+            ),
+
+          lastDrawnDa:
+            this.number(
+              historicalSnapshot.monthlyDa,
+            ),
+
+          lastDrawnBasicDa:
+            this.roundTwo(
+              this.number(
+                historicalSnapshot.monthlyBasic,
+              ) +
+                this.number(
+                  historicalSnapshot.monthlyDa,
+                ),
+            ),
+
+          bankDetails: {
+            bankName:
+              historicalSnapshot.bankName,
+            bankBranch:
+              historicalSnapshot.bankBranch,
+            accountNumber:
+              historicalSnapshot.accountNumber,
+            ifscCode:
+              historicalSnapshot.ifscCode,
+          },
+        },
+
+        earnings: {
+          lastWages: {
+            salaryMonth: leavingMonthStart,
+            amount: this.roundTwo(lastWages),
+            remark: lastWagesRemark,
+          },
+
+          leaveEncashment: {
+            leaveYear,
+            amount: this.roundTwo(leaveAmount),
+            status: leaveStatus,
+            remark: leaveRemark,
+          },
+
+          bonus: {
+            financialYear: bonusFinancialYear,
+            financialYearLabel:
+              `${bonusFinancialYear}-${bonusFinancialYear + 1}`,
+            amount: this.roundTwo(bonusAmount),
+            status: bonusStatus,
+            remark: bonusRemark,
+          },
+
+          gratuity: null,
+          otherDuesPayable: null,
+
+          grossAmountPayable,
+        },
+
+        deductions: {
+          advanceRecovery,
+
+          uniformShoesRecovery:
+            this.roundTwo(uniformShoesRecovery),
+
+          otherPermissibleDeduction:
+            this.roundTwo(
+              otherPermissibleDeduction,
+            ),
+
+          grossAmountToBeDeducted,
+        },
+
+        settlement: {
+          totalAmountPayable,
+
+          modeOfPayment: null,
+          dateOfPayment: null,
+        },
+      },
+    };
+  }
+
+  async updateFnFSettlement(
+    dto: UpdateFnFSettlementDto,
+  ) {
+    const employee =
+      await this.benefitsReportsRepository.findFnFEmployee(
+        dto.employeeId,
+      );
+
+    if (!employee) {
+      throw new NotFoundException(
+        `Employee with ID ${dto.employeeId} not found.`,
+      );
+    }
+
+    if (!employee.leftDate) {
+      throw new BadRequestException(
+        `Employee with ID ${dto.employeeId} is not eligible for F&F because Date of Leaving is not set.`,
+      );
+    }
+
+    await this.benefitsReportsRepository.upsertFnFSettlement({
+      employeeId: dto.employeeId,
+
+      uniformShoesRecovery:
+        dto.uniformShoesRecovery,
+
+      otherPermissibleDeduction:
+        dto.otherPermissibleDeduction,
+    });
+
+    return this.getFnFSettlement(dto.employeeId);
   }
 }

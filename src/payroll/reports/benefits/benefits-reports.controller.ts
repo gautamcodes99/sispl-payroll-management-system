@@ -1,5 +1,7 @@
 import { Body, Controller, Get, Patch, Query } from '@nestjs/common';
 import { BenefitsReportsService } from './benefits-reports.service';
+import { FnFSettlementQueryDto } from './dto/fnf-settlement-query.dto';
+import { UpdateFnFSettlementDto } from './dto/update-fnf-settlement.dto';
 import { BonusBankTransferQueryDto } from './dto/bonus-bank-transfer-query.dto';
 import { BonusFormCQueryDto } from './dto/bonus-form-c-query.dto';
 import { BonusSettingQueryDto } from './dto/bonus-setting-query.dto';
@@ -70,5 +72,21 @@ export class BenefitsReportsController {
   @Patch('bonus-setting')
   async updateBonusSetting(@Body() dto: UpdateBonusSettingDto) {
     return this.benefitsReportsService.updateBonusSetting(dto);
+  }
+
+  // =========================================================
+  // FULL AND FINAL SETTLEMENT
+  // =========================================================
+
+  @Get('fnf-settlement')
+  async getFnFSettlement(@Query() query: FnFSettlementQueryDto) {
+    return this.benefitsReportsService.getFnFSettlement(
+      query.employeeId,
+    );
+  }
+
+  @Patch('fnf-settlement')
+  async updateFnFSettlement(@Body() dto: UpdateFnFSettlementDto) {
+    return this.benefitsReportsService.updateFnFSettlement(dto);
   }
 }

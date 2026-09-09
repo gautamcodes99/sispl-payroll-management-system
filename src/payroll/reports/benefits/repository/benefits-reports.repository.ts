@@ -353,4 +353,273 @@ export class BenefitsReportsRepository {
       ),
     );
   }
+
+  // =========================================================
+  // FULL AND FINAL SETTLEMENT
+  //
+  // Employee.leftDate is the authoritative F&F eligibility
+  // and Date of Leaving source.
+  //
+  // Historical payroll values come only from current
+  // reportable Payroll Runs:
+  // FINALIZED / UNLOCKED.
+  //
+  // SUPERSEDED payroll versions are intentionally excluded.
+  //
+  // FnFSettlement stores only the two HR-entered deductions.
+  // All other F&F values remain derived.
+  // =========================================================
+
+  async findFnFEmployee(employeeId: number) {
+    return this.prisma.employee.findUnique({
+      where: {
+        id: employeeId,
+      },
+
+      select: {
+        id: true,
+        joiningDate: true,
+        leftDate: true,
+      },
+    });
+  }
+
+  async findFnFLeavingMonthSnapshots(
+    employeeId: number,
+    leavingMonthStart: Date,
+    nextMonthStart: Date,
+  ) {
+    return this.prisma.payrollEmployeeSnapshot.findMany({
+      where: {
+        employeeId,
+
+        payrollRun: {
+          salaryMonth: {
+            gte: leavingMonthStart,
+            lt: nextMonthStart,
+          },
+
+          status: {
+            in: [
+              PayrollRunStatus.FINALIZED,
+              PayrollRunStatus.UNLOCKED,
+            ],
+          },
+        },
+      },
+
+      orderBy: [
+        {
+          payrollRun: {
+            version: 'desc',
+          },
+        },
+      ],
+
+      select: {
+        id: true,
+        employeeId: true,
+
+        employeeName: true,
+        designationName: true,
+
+        bankName: true,
+        bankBranch: true,
+        accountNumber: true,
+        ifscCode: true,
+        uanNumber: true,
+        esicNumber: true,
+
+        monthlyBasic: true,
+        monthlyDa: true,
+        netSalary: true,
+
+        payrollRun: {
+          select: {
+            id: true,
+            salaryMonth: true,
+            version: true,
+            status: true,
+          },
+        },
+
+        payment: {
+          select: {
+            status: true,
+            paymentDate: true,
+            paymentMode: true,
+          },
+        },
+      },
+    });
+  }
+
+  async findFnFHistoricalSnapshotsThroughMonth(
+    employeeId: number,
+    nextMonthStart: Date,
+  ) {
+    return this.prisma.payrollEmployeeSnapshot.findMany({
+      where: {
+        employeeId,
+
+        payrollRun: {
+          salaryMonth: {
+            lt: nextMonthStart,
+          },
+
+          status: {
+            in: [
+              PayrollRunStatus.FINALIZED,
+              PayrollRunStatus.UNLOCKED,
+            ],
+          },
+        },
+      },
+
+      orderBy: [
+        {
+          payrollRun: {
+            salaryMonth: 'desc',
+          },
+        },
+        {
+          payrollRun: {
+            version: 'desc',
+          },
+        },
+      ],
+
+      select: {
+        id: true,
+        employeeId: true,
+
+        employeeName: true,
+        designationName: true,
+
+        bankName: true,
+        bankBranch: true,
+        accountNumber: true,
+        ifscCode: true,
+        uanNumber: true,
+        esicNumber: true,
+
+        monthlyBasic: true,
+        monthlyDa: true,
+
+        payrollRun: {
+          select: {
+            id: true,
+            salaryMonth: true,
+            version: true,
+            status: true,
+          },
+        },
+      },
+    });
+  }
+
+  async findFnFLeavePayment(employeeId: number, leaveYear: number) {
+    return this.prisma.leavePayment.findUnique({
+      where: {
+        employeeId_leaveYear: {
+          employeeId,
+          leaveYear,
+        },
+      },
+
+      select: {
+        employeeId: true,
+        leaveYear: true,
+        status: true,
+        paymentDate: true,
+        paymentMode: true,
+      },
+    });
+  }
+
+  async findFnFBonusPayment(
+    employeeId: number,
+    financialYear: number,
+  ) {
+    return this.prisma.bonusPayment.findUnique({
+      where: {
+        employeeId_financialYear: {
+          employeeId,
+          financialYear,
+        },
+      },
+
+      select: {
+        employeeId: true,
+        financialYear: true,
+        status: true,
+        paymentDate: true,
+        paymentMode: true,
+      },
+    });
+  }
+
+  async findFnFAdvanceHistoryThroughMonth(
+    employeeId: number,
+    nextMonthStart: Date,
+  ) {
+    return this.prisma.manualDeduction.findMany({
+      where: {
+        employeeId,
+
+        salaryMonth: {
+          lt: nextMonthStart,
+        },
+      },
+
+      select: {
+        employeeId: true,
+        salaryMonth: true,
+        newAdvance: true,
+        numberOfInstallments: true,
+        advanceRecovery: true,
+      },
+
+      orderBy: {
+        salaryMonth: 'asc',
+      },
+    });
+  }
+
+  async findFnFSettlement(employeeId: number) {
+    return this.prisma.fnFSettlement.findUnique({
+      where: {
+        employeeId,
+      },
+    });
+  }
+
+  async upsertFnFSettlement(params: {
+    employeeId: number;
+    uniformShoesRecovery: number;
+    otherPermissibleDeduction: number;
+  }) {
+    const {
+      employeeId,
+      uniformShoesRecovery,
+      otherPermissibleDeduction,
+    } = params;
+
+    return this.prisma.fnFSettlement.upsert({
+      where: {
+        employeeId,
+      },
+
+      create: {
+        employeeId,
+        uniformShoesRecovery,
+        otherPermissibleDeduction,
+      },
+
+      update: {
+        uniformShoesRecovery,
+        otherPermissibleDeduction,
+      },
+    });
+  }
 }

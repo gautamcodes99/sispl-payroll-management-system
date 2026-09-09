@@ -50,6 +50,7 @@ model Employee {
   payrollSnapshots   PayrollEmployeeSnapshot[]
   leavePayments      LeavePayment[]
   bonusPayments      BonusPayment[]
+  fnfSettlement      FnFSettlement?
 }
 
 model Site {
@@ -568,6 +569,27 @@ enum BonusPaymentMode {
   CMS
   NET_BANKING
   CHEQUE
+}
+
+// =========================================================
+// FULL AND FINAL SETTLEMENT
+//
+// Stores only HR-entered F&F deduction values.
+// Salary, Leave, Bonus, Advance and settlement totals remain
+// derived from their authoritative historical sources.
+// =========================================================
+
+model FnFSettlement {
+  id         Int @id @default(autoincrement())
+  employeeId Int @unique
+
+  uniformShoesRecovery      Decimal @default(0) @db.Decimal(14, 2)
+  otherPermissibleDeduction Decimal @default(0) @db.Decimal(14, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 }
 
 enum AttendanceStatus {
