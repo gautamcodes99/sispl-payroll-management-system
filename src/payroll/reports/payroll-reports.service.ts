@@ -391,6 +391,7 @@ export class PayrollReportsService {
   // - PayrollEmployeeSnapshot -> historical payroll values
   // - Attendance              -> daily attendance codes
   // - Employee Master         -> DOB / DOJ
+  // - PayrollPayment          -> payment date / payment mode
   //
   // Employee Master details are fetched independently from
   // Attendance so an employee with zero Attendance can still
@@ -400,8 +401,6 @@ export class PayrollReportsService {
   //
   // Ignored for now:
   // - Leave with Wages BM:BP
-  // - Date of Payment
-  // - Paid Through Bank
   // =========================================================
 
   async getFormIi(salaryMonthInput: Date) {
@@ -426,17 +425,25 @@ export class PayrollReportsService {
       (snapshot) => snapshot.employeeId,
     );
 
-    const [attendances, employeeDetails] = await Promise.all([
+    const [attendances, employeeDetails, paymentContexts] = await Promise.all([
       this.payrollReportsRepository.findFormIiMonthlyAttendance(
         salaryMonth,
         employeeIds,
       ),
 
       this.payrollReportsRepository.findFormIiEmployeeDetails(employeeIds),
+
+      this.payrollReportsRepository.findPayrollSnapshotsPaymentContext(
+        payrollRun.snapshots.map((snapshot) => snapshot.id),
+      ),
     ]);
 
     const employeeDetailsById = new Map(
       employeeDetails.map((employee) => [employee.id, employee]),
+    );
+
+    const paymentBySnapshotId = new Map(
+      paymentContexts.map((snapshot) => [snapshot.id, snapshot.payment]),
     );
 
     const daysInMonth = new Date(
@@ -482,6 +489,8 @@ export class PayrollReportsService {
       const attendanceContext = attendanceByEmployee.get(snapshot.employeeId);
 
       const employeeDetail = employeeDetailsById.get(snapshot.employeeId);
+
+      const payment = paymentBySnapshotId.get(snapshot.id);
 
       const days = Array.from({ length: daysInMonth }, (_, dayIndex) => {
         const day = dayIndex + 1;
@@ -563,6 +572,15 @@ export class PayrollReportsService {
         totalDeduction: this.money(snapshot.totalDeductions),
 
         netWages: this.money(snapshot.netSalary),
+
+        dateOfPaymentOfWages:
+          payment?.status === 'PAID' ? payment.paymentDate : null,
+
+        paidThroughBank:
+          payment?.status === 'PAID' &&
+          payment.paymentMode === 'BANK_TRANSFER'
+            ? snapshot.bankName
+            : null,
       };
     });
 
