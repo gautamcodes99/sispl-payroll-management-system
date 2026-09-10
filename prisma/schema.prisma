@@ -653,3 +653,39 @@ model User {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 }
+
+// =========================================================
+// COMPANY PROFILE
+//
+// Stores the single SISPL legal/company profile used by
+// System Administration.
+//
+// This is independent of Site and operational organisation
+// structure. The application always uses record id = 1.
+// =========================================================
+
+model CompanyProfile {
+  id Int @id @default(1)
+
+  companyName          String
+  shortName            String?
+  registeredAddress    String
+  communicationAddress String?
+
+  phoneNumber String?
+  email       String?
+  website     String?
+
+  pan   String?
+  tan   String?
+  gstin String?
+  cin   String?
+
+  pfEstablishmentCode    String?
+  esicEmployerCode       String?
+  ptaxRegistrationNumber String?
+  mlwfRegistrationNumber String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

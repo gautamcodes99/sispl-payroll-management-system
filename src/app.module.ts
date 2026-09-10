@@ -8,6 +8,7 @@ import { AttendanceModule } from './attendance/attendance.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
+import { CompanyProfileModule } from './company-profile/company-profile.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { EmployeeModule } from './employee/employee.module';
 import { ManualDeductionModule } from './manual-deduction/manual-deduction.module';
@@ -27,6 +28,7 @@ import { WageMasterModule } from './wage-master/wage-master.module';
     }),
     AuthModule,
     UserModule,
+    CompanyProfileModule,
     EmployeeModule,
     PrismaModule,
     AttendanceModule,
