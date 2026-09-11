@@ -1,5 +1,10 @@
 import { Type } from 'class-transformer';
-import { IsDateString, IsNumber, IsString } from 'class-validator';
+import {
+  IsDateString,
+  IsNumber,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 export class CreateEmployeeDto {
   // Personal Information
@@ -7,11 +12,13 @@ export class CreateEmployeeDto {
   @IsString()
   firstName!: string;
 
+  @IsOptional()
   @IsString()
-  lastName!: string;
+  lastName?: string;
 
+  @IsOptional()
   @IsString()
-  phone!: string;
+  phone?: string;
 
   // Employment
 

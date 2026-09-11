@@ -45,6 +45,10 @@ export class EmployeeService {
   // =========================================================
 
   async create(createEmployeeDto: CreateEmployeeDto) {
+    if (!createEmployeeDto.firstName?.trim()) {
+      throw new BadRequestException('First Name is required.');
+    }
+
     const employee =
       await this.employeeRepository.createEmployee(createEmployeeDto);
 
@@ -107,6 +111,13 @@ export class EmployeeService {
       throw new NotFoundException('Employee not found.');
     }
 
+    if (
+      updateEmployeeProfileDto.firstName !== undefined &&
+      !updateEmployeeProfileDto.firstName.trim()
+    ) {
+      throw new BadRequestException('First Name is required.');
+    }
+
     const gender = (updateEmployeeProfileDto.gender ?? employee.gender ?? '')
       .trim()
       .toUpperCase();
@@ -126,13 +137,7 @@ export class EmployeeService {
           ? updateEmployeeProfileDto.husbandName?.trim()
           : employee.husbandName?.trim();
 
-      if (!husbandName) {
-        throw new BadRequestException(
-          'Husband name is required for a married female employee.',
-        );
-      }
-
-      normalizedProfile.husbandName = husbandName;
+      normalizedProfile.husbandName = husbandName || null;
       normalizedProfile.fatherName = null;
     } else {
       /*
@@ -556,38 +561,9 @@ export class EmployeeService {
         );
       }
 
-      if (!lastName) {
-        this.addImportError(
-          errors,
-          row,
-          'Last Name',
-          row.lastName,
-          'Last Name is required.',
-        );
-      }
-
-      if (!phone) {
-        this.addImportError(
-          errors,
-          row,
-          'Phone Number',
-          row.phone,
-          'Phone Number is required.',
-        );
-      }
       // -----------------------------------------------------
       // MARITAL DETAILS
       // -----------------------------------------------------
-
-      if (isMarriedFemale && !husbandName) {
-        this.addImportError(
-          errors,
-          row,
-          'Husband Name',
-          row.husbandName,
-          'Husband Name is required for a married female employee.',
-        );
-      }
 
       // -----------------------------------------------------
       // DESIGNATION

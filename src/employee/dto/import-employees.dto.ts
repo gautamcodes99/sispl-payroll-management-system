@@ -19,8 +19,9 @@ export class ImportEmployeeRowDto {
   @IsString()
   firstName!: string;
 
+  @IsOptional()
   @IsString()
-  lastName!: string;
+  lastName?: string;
 
   @IsOptional()
   @IsString()
@@ -42,8 +43,9 @@ export class ImportEmployeeRowDto {
   @IsString()
   gender?: string;
 
+  @IsOptional()
   @IsString()
-  phone!: string;
+  phone?: string;
 
   @IsOptional()
   @IsEmail()

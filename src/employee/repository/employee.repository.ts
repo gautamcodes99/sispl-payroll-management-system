@@ -105,9 +105,9 @@ export class EmployeeRepository {
   async createEmployee(createEmployeeDto: CreateEmployeeDto) {
     return this.prisma.employee.create({
       data: {
-        firstName: createEmployeeDto.firstName,
-        lastName: createEmployeeDto.lastName,
-        phone: createEmployeeDto.phone,
+        firstName: createEmployeeDto.firstName.trim(),
+        lastName: createEmployeeDto.lastName?.trim() || '',
+        phone: createEmployeeDto.phone?.trim() || null,
         joiningDate: new Date(createEmployeeDto.joiningDate),
         basicSalary: createEmployeeDto.basicSalary,
 
@@ -598,7 +598,7 @@ export class EmployeeRepository {
           const employee = await tx.employee.create({
             data: {
               firstName: row.firstName.trim(),
-              lastName: row.lastName.trim(),
+              lastName: row.lastName?.trim() || '',
 
               fatherName: row.fatherName?.trim() || null,
               maritalStatus: row.maritalStatus ?? null,
@@ -606,7 +606,7 @@ export class EmployeeRepository {
               dateOfBirth,
               gender: row.gender?.trim() || null,
 
-              phone: row.phone.trim(),
+              phone: row.phone?.trim() || null,
               email: row.email?.trim() || null,
 
               joiningDate,
