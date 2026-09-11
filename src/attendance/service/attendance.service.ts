@@ -16,10 +16,14 @@ import { AttendanceReportQueryDto } from '../dto/attendance-report-query.dto';
 import { AttendanceStatus } from '@prisma/client';
 import { FormXxiiiReportQueryDto } from '../dto/form-xxiii-report-query.dto';
 import { MusterCutFileQueryDto } from '../dto/muster-cut-file-query.dto';
+import { HolidayCalendarRepository } from '../../holiday-calendar/repository/holiday-calendar.repository';
 
 @Injectable()
 export class AttendanceService {
-  constructor(private readonly attendanceRepository: AttendanceRepository) {}
+  constructor(
+    private readonly attendanceRepository: AttendanceRepository,
+    private readonly holidayCalendarRepository: HolidayCalendarRepository,
+  ) {}
 
   // =========================================================
   // SALARY MONTH
@@ -364,6 +368,77 @@ export class AttendanceService {
         return '';
     }
   }
+  // =========================================================
+  // ATTENDANCE REPORT HOLIDAY CALENDAR
+  //
+  // Organisation-wide Holiday Calendar used only by:
+  //
+  // - Muster
+  // - OT Muster
+  // - Muster With OT
+  // - Muster Cut File
+  // - OT Muster Cut File
+  //
+  // WEEK_OFF:
+  // - Muster and Muster With OT may display WO only when
+  //   there is no manually punched Attendance for that date.
+  //
+  // OT Muster / Muster Cut File / OT Muster Cut File:
+  // - Calendar information is metadata for coloring only.
+  //
+  // HOLIDAY:
+  // - Metadata/coloring only.
+  // - Never automatically creates H or PH.
+  //
+  // No Attendance rows are created here.
+  // No payroll calculation is performed here.
+  // =========================================================
+
+  private async getAttendanceReportCalendar(year: number, month: number) {
+    const startDate = new Date(Date.UTC(year, month - 1, 1));
+
+    const daysInMonth = new Date(
+      Date.UTC(year, month, 0),
+    ).getUTCDate();
+
+    const endDate = new Date(
+      Date.UTC(year, month - 1, daysInMonth),
+    );
+
+    const entries = await this.holidayCalendarRepository.findAll(
+      startDate,
+      endDate,
+    );
+
+    const calendarByDay = new Map<
+      number,
+      {
+        type: 'WEEK_OFF' | 'HOLIDAY';
+        name: string | null;
+      }
+    >();
+
+    const calendarDays = entries.map((entry) => {
+      const day = entry.date.getUTCDate();
+
+      calendarByDay.set(day, {
+        type: entry.type,
+        name: entry.name,
+      });
+
+      return {
+        day,
+        date: entry.date,
+        type: entry.type,
+        name: entry.name,
+      };
+    });
+
+    return {
+      calendarByDay,
+      calendarDays,
+    };
+  }
   private getAttendanceReportShiftOrder(shift: string): number {
     switch (shift) {
       case 'FIRST':
@@ -564,8 +639,10 @@ export class AttendanceService {
     // RAW ATTENDANCE
     // -------------------------------------------------------
 
-    const attendances =
-      await this.attendanceRepository.findMonthlyAttendanceReportData(query);
+    const [attendances, holidayCalendar] = await Promise.all([
+      this.attendanceRepository.findMonthlyAttendanceReportData(query),
+      this.getAttendanceReportCalendar(query.year, query.month),
+    ]);
 
     // -------------------------------------------------------
     // EMPLOYEE GROUPING
@@ -580,6 +657,7 @@ export class AttendanceService {
       designationId: number;
       designationName: string;
       attendanceByDay: Map<number, Array<{ shift: string; code: string }>>;
+      manualAttendanceDays: Set<number>;
     };
 
     const employeeMap = new Map<string, MusterEmployeeAccumulator>();
@@ -601,12 +679,18 @@ export class AttendanceService {
           designationId: attendance.designation.id,
           designationName: attendance.designation.designationName,
           attendanceByDay: new Map(),
+          manualAttendanceDays: new Set<number>(),
         };
 
         employeeMap.set(employeeDesignationKey, accumulator);
       }
 
       const day = attendance.attendanceDate.getUTCDate();
+
+      // Any manually punched Attendance row overrides the
+      // organisation calendar WEEK_OFF for this employee/date.
+      // This includes statuses intentionally hidden in reports.
+      accumulator.manualAttendanceDays.add(day);
 
       const code = this.mapAttendanceStatusToReportCode(attendance.status);
 
@@ -661,6 +745,16 @@ export class AttendanceService {
             employee.attendanceByDay.get(day) ?? [],
           );
 
+          const calendarEntry = holidayCalendar.calendarByDay.get(day);
+
+          const code =
+            entries.length > 0
+              ? entries.map((entry) => entry.code).join('/')
+              : !employee.manualAttendanceDays.has(day) &&
+                  calendarEntry?.type === 'WEEK_OFF'
+                ? 'WO'
+                : '';
+
           let dayMandays = 0;
 
           for (const entry of entries) {
@@ -680,7 +774,7 @@ export class AttendanceService {
 
           return {
             day,
-            code: entries.map((entry) => entry.code).join('/'),
+            code,
           };
         });
 
@@ -739,6 +833,8 @@ export class AttendanceService {
           department: context.department,
 
           shift: query.shift ?? null,
+
+          calendarDays: holidayCalendar.calendarDays,
         },
 
         employees,
@@ -795,8 +891,10 @@ export class AttendanceService {
     // RAW OT ATTENDANCE
     // -------------------------------------------------------
 
-    const otAttendances =
-      await this.attendanceRepository.findMonthlyOtAttendanceReportData(query);
+    const [otAttendances, holidayCalendar] = await Promise.all([
+      this.attendanceRepository.findMonthlyOtAttendanceReportData(query),
+      this.getAttendanceReportCalendar(query.year, query.month),
+    ]);
 
     // -------------------------------------------------------
     // EMPLOYEE GROUPING
@@ -957,6 +1055,10 @@ export class AttendanceService {
           department: context.department,
 
           shift: query.shift ?? null,
+
+          // Calendar metadata only. It must never generate
+          // or change manually entered OT values.
+          calendarDays: holidayCalendar.calendarDays,
         },
 
         employees,
@@ -1015,9 +1117,10 @@ export class AttendanceService {
     // RAW ATTENDANCE
     // -------------------------------------------------------
 
-    const [attendances, otAttendances] = await Promise.all([
+    const [attendances, otAttendances, holidayCalendar] = await Promise.all([
       this.attendanceRepository.findMonthlyAttendanceReportData(query),
       this.attendanceRepository.findMonthlyOtAttendanceReportData(query),
+      this.getAttendanceReportCalendar(query.year, query.month),
     ]);
 
     // -------------------------------------------------------
@@ -1034,6 +1137,7 @@ export class AttendanceService {
       designationName: string;
 
       attendanceByDay: Map<number, Array<{ shift: string; code: string }>>;
+      manualAttendanceDays: Set<number>;
       otByDay: Map<number, number>;
     };
 
@@ -1056,6 +1160,7 @@ export class AttendanceService {
           designationId: attendance.designation.id,
           designationName: attendance.designation.designationName,
           attendanceByDay: new Map(),
+          manualAttendanceDays: new Set<number>(),
           otByDay: new Map<number, number>(),
         };
 
@@ -1063,6 +1168,10 @@ export class AttendanceService {
       }
 
       const day = attendance.attendanceDate.getUTCDate();
+
+      // Any manually punched Attendance row overrides the
+      // organisation calendar WEEK_OFF for this employee/date.
+      accumulator.manualAttendanceDays.add(day);
 
       // -----------------------------------------------------
       // ATTENDANCE CODE
@@ -1107,6 +1216,7 @@ export class AttendanceService {
           designationName: otAttendance.designation.designationName,
 
           attendanceByDay: new Map(),
+          manualAttendanceDays: new Set<number>(),
           otByDay: new Map<number, number>(),
         };
 
@@ -1166,7 +1276,15 @@ export class AttendanceService {
             employee.attendanceByDay.get(day) ?? [],
           );
 
-          const code = entries.map((entry) => entry.code).join('/');
+          const calendarEntry = holidayCalendar.calendarByDay.get(day);
+
+          const code =
+            entries.length > 0
+              ? entries.map((entry) => entry.code).join('/')
+              : !employee.manualAttendanceDays.has(day) &&
+                  calendarEntry?.type === 'WEEK_OFF'
+                ? 'WO'
+                : '';
 
           const otHours = employee.otByDay.get(day) ?? 0;
 
@@ -1256,6 +1374,8 @@ export class AttendanceService {
           department: context.department,
 
           shift: query.shift ?? null,
+
+          calendarDays: holidayCalendar.calendarDays,
         },
 
         employees,
@@ -1518,8 +1638,10 @@ export class AttendanceService {
     // RAW ATTENDANCE
     // -------------------------------------------------------
 
-    const attendances =
-      await this.attendanceRepository.findMusterCutFileData(query);
+    const [attendances, holidayCalendar] = await Promise.all([
+      this.attendanceRepository.findMusterCutFileData(query),
+      this.getAttendanceReportCalendar(query.year, query.month),
+    ]);
 
     // -------------------------------------------------------
     // INTERNAL TYPES
@@ -1745,6 +1867,10 @@ export class AttendanceService {
             shift: query.shift ?? null,
           },
 
+          // Metadata only for date-column coloring.
+          // Calendar entries must not affect Cut File mandays.
+          calendarDays: holidayCalendar.calendarDays,
+
           print: {
             paperSize: 'A4',
             orientation: 'LANDSCAPE',
@@ -1807,8 +1933,10 @@ export class AttendanceService {
     // RAW DAILY OT ATTENDANCE
     // -------------------------------------------------------
 
-    const attendances =
-      await this.attendanceRepository.findOtMusterCutFileData(query);
+    const [attendances, holidayCalendar] = await Promise.all([
+      this.attendanceRepository.findOtMusterCutFileData(query),
+      this.getAttendanceReportCalendar(query.year, query.month),
+    ]);
 
     // -------------------------------------------------------
     // STEP 1
@@ -2115,6 +2243,11 @@ export class AttendanceService {
           },
 
           hourSlabs: Array.from(allHourSlabs).sort((a, b) => a - b),
+
+          // Metadata only for date-column coloring.
+          // Calendar entries must not affect OT slabs,
+          // employee counts or OT totals.
+          calendarDays: holidayCalendar.calendarDays,
 
           print: {
             paperSize: 'A4',

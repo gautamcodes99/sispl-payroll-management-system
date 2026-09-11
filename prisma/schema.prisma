@@ -689,3 +689,38 @@ model CompanyProfile {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+// =========================================================
+// HOLIDAY CALENDAR
+//
+// Organisation-wide calendar used by all Sites, Work Types,
+// Departments and Employees.
+//
+// WEEK_OFF:
+// - Used as the default WO date in Attendance Reports.
+// - Manually punched employee attendance overrides WO.
+//
+// HOLIDAY:
+// - Calendar/highlight information only.
+// - Does NOT automatically create PAID_HOLIDAY / PH.
+// - Employee attendance remains manually punched.
+//
+// This calendar does not calculate payroll attendance.
+// =========================================================
+
+model HolidayCalendar {
+  id   Int                 @id @default(autoincrement())
+  date DateTime            @unique
+  type HolidayCalendarType
+  name String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([date, type])
+}
+
+enum HolidayCalendarType {
+  WEEK_OFF
+  HOLIDAY
+}

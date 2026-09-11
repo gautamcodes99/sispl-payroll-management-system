@@ -11,6 +11,7 @@ import { RolesGuard } from './auth/guards/roles.guard';
 import { CompanyProfileModule } from './company-profile/company-profile.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { EmployeeModule } from './employee/employee.module';
+import { HolidayCalendarModule } from './holiday-calendar/holiday-calendar.module';
 import { ManualDeductionModule } from './manual-deduction/manual-deduction.module';
 import { OrganisationModule } from './organisation/organisation.module';
 import { OtAttendanceModule } from './ot-attendance/ot-attendance.module';
@@ -30,6 +31,7 @@ import { WageMasterModule } from './wage-master/wage-master.module';
     UserModule,
     CompanyProfileModule,
     EmployeeModule,
+    HolidayCalendarModule,
     PrismaModule,
     AttendanceModule,
     OtAttendanceModule,
