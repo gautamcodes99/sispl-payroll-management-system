@@ -20,6 +20,7 @@ import { MonthlyAttendanceQueryDto } from '../dto/monthly-attendance-query.dto';
 import { AttendanceReportQueryDto } from '../dto/attendance-report-query.dto';
 import { FormXxiiiReportQueryDto } from '../dto/form-xxiii-report-query.dto';
 import { MusterCutFileQueryDto } from '../dto/muster-cut-file-query.dto';
+import { MultiShiftWarningQueryDto } from '../dto/multi-shift-warning-query.dto';
 
 @Controller('attendance')
 export class AttendanceController {
@@ -104,6 +105,14 @@ export class AttendanceController {
     return this.attendanceService.getOtMusterCutFileReport(query);
   }
 
+  // =========================================================
+  // MULTI-SHIFT WARNING
+  // =========================================================
+
+  @Get('multi-shift-warning')
+  getMultiShiftWarning(@Query() query: MultiShiftWarningQueryDto) {
+    return this.attendanceService.getMultiShiftWarning(query);
+  }
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.attendanceService.findAttendanceById(id);

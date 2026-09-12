@@ -16,6 +16,7 @@ import { AttendanceReportQueryDto } from '../dto/attendance-report-query.dto';
 import { AttendanceStatus } from '@prisma/client';
 import { FormXxiiiReportQueryDto } from '../dto/form-xxiii-report-query.dto';
 import { MusterCutFileQueryDto } from '../dto/muster-cut-file-query.dto';
+import { MultiShiftWarningQueryDto } from '../dto/multi-shift-warning-query.dto';
 import { HolidayCalendarRepository } from '../../holiday-calendar/repository/holiday-calendar.repository';
 
 @Injectable()
@@ -183,6 +184,48 @@ export class AttendanceService {
     }
   }
 
+  // =========================================================
+  // MULTI-SHIFT WARNING CHECK
+  //
+  // Warning only:
+  // - Applies when punching SECOND or THIRD shift.
+  // - Warns only when FIRST shift was PRESENT or HALF_DAY.
+  // - Does not block multi-shift attendance.
+  // =========================================================
+
+  async getMultiShiftWarning(query: MultiShiftWarningQueryDto) {
+    if (query.shift === 'FIRST') {
+      return {
+        success: true,
+        message: 'Multi-shift warning checked successfully.',
+        data: {
+          shouldWarn: false,
+          firstShiftStatus: null,
+        },
+      };
+    }
+
+    const attendanceDate = new Date(query.attendanceDate);
+
+    const firstShiftAttendance =
+      await this.attendanceRepository.findFirstShiftAttendance(
+        query.employeeId,
+        attendanceDate,
+      );
+
+    const shouldWarn =
+      firstShiftAttendance?.status === 'PRESENT' ||
+      firstShiftAttendance?.status === 'HALF_DAY';
+
+    return {
+      success: true,
+      message: 'Multi-shift warning checked successfully.',
+      data: {
+        shouldWarn,
+        firstShiftStatus: firstShiftAttendance?.status ?? null,
+      },
+    };
+  }
   // =========================================================
   // CREATE
   // =========================================================

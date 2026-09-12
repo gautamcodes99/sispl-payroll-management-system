@@ -20,8 +20,8 @@ export class AttendanceRepository {
   // // Locked organisation architecture:
   //
   // Site
-  // └── Work Type
-  //     └── Department
+  // â””â”€â”€ Work Type
+  //     â””â”€â”€ Department
   //
   // Designation is a company-wide master.
   // Employee belongs to Designation.
@@ -672,6 +672,26 @@ export class AttendanceRepository {
   // FIND EXISTING ATTENDANCE
   // =========================================================
 
+  // =========================================================
+  // FIND FIRST SHIFT ATTENDANCE FOR MULTI-SHIFT WARNING
+  // =========================================================
+
+  async findFirstShiftAttendance(employeeId: number, attendanceDate: Date) {
+    return this.prisma.attendance.findFirst({
+      where: {
+        employeeId,
+        attendanceDate,
+        shift: 'FIRST',
+      },
+      select: {
+        id: true,
+        employeeId: true,
+        attendanceDate: true,
+        status: true,
+        shift: true,
+      },
+    });
+  }
   async findExistingAttendance(
     attendanceDate: Date,
     employeeIds: number[],
