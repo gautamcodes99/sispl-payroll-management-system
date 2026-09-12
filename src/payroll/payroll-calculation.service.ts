@@ -29,6 +29,10 @@ export class PayrollCalculationService {
     );
   }
 
+  private roundToTwoDecimals(value: number): number {
+    return Number(value.toFixed(2));
+  }
+
   // =========================================================
   // PAYABLE DAYS
   //
@@ -214,10 +218,16 @@ export class PayrollCalculationService {
     // Locked 26-day basis.
     // =======================================================
 
-    const earnedBasic = (monthlyBasic / 26) * attendance.payableDays;
-    const earnedDa = (monthlyDa / 26) * attendance.payableDays;
+    const monthlyWages = monthlyBasic + monthlyDa;
 
-    const wages = earnedBasic + earnedDa;
+    const dailyWageRate = this.roundToTwoDecimals(monthlyWages / 26);
+
+    const wages = dailyWageRate * attendance.payableDays;
+
+    const earnedBasic =
+      monthlyWages > 0 ? wages * (monthlyBasic / monthlyWages) : 0;
+
+    const earnedDa = wages - earnedBasic;
 
     // =======================================================
     // HRA
@@ -235,7 +245,7 @@ export class PayrollCalculationService {
     // ((Basic + DA) / 26 / 8 × 2) × 1.05
     // =======================================================
 
-    const baseOtRate = ((monthlyBasic + monthlyDa) / 26 / 8) * 2;
+    const baseOtRate = (dailyWageRate / 8) * 2;
 
     const otRate = baseOtRate * 1.05;
 
@@ -360,7 +370,8 @@ export class PayrollCalculationService {
     // PREVIEW RESULT
     //
     // No database write occurs here.
-    // No rounding is applied.
+    // Only the locked Daily Minimum Wage Rate is rounded to
+    // 2 decimal places before downstream wage calculations.
     // =======================================================
 
     return {
