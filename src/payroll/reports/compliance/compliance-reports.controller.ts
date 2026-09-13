@@ -11,7 +11,7 @@ export class ComplianceReportsController {
   // =========================================================
   // PF ANNEXURE
   //
-  // Company-wide statutory Compliance Report.
+  // Site-wise statutory Compliance Report.
   //
   // Uses the current FINALIZED / UNLOCKED Payroll Run
   // snapshot.
@@ -20,6 +20,7 @@ export class ComplianceReportsController {
   @Get('pf-annexure')
   async getPfAnnexure(@Query() query: ComplianceReportQueryDto) {
     return this.complianceReportsService.getPfAnnexure(
+      query.siteId,
       new Date(query.salaryMonth),
     );
   }
@@ -27,7 +28,7 @@ export class ComplianceReportsController {
   // =========================================================
   // ESIC ANNEXURE
   //
-  // Company-wide statutory Compliance Report.
+  // Site-wise statutory Compliance Report.
   //
   // Uses the current FINALIZED / UNLOCKED Payroll Run
   // snapshot.
@@ -36,6 +37,7 @@ export class ComplianceReportsController {
   @Get('esic-annexure')
   async getEsicAnnexure(@Query() query: ComplianceReportQueryDto) {
     return this.complianceReportsService.getEsicAnnexure(
+      query.siteId,
       new Date(query.salaryMonth),
     );
   }
@@ -43,7 +45,7 @@ export class ComplianceReportsController {
   // =========================================================
   // PTAX ANNEXURE
   //
-  // Company-wide statutory Compliance Report.
+  // Site-wise statutory Compliance Report.
   //
   // Uses the current FINALIZED / UNLOCKED Payroll Run
   // snapshot.
@@ -52,6 +54,7 @@ export class ComplianceReportsController {
   @Get('ptax-annexure')
   async getPtaxAnnexure(@Query() query: ComplianceReportQueryDto) {
     return this.complianceReportsService.getPtaxAnnexure(
+      query.siteId,
       new Date(query.salaryMonth),
     );
   }

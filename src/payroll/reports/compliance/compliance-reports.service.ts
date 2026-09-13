@@ -39,25 +39,39 @@ export class ComplianceReportsService {
   // CURRENT PAYROLL RUN
   // =========================================================
 
-  private async getCurrentPayrollRun(salaryMonthInput: Date) {
+  private async getCurrentPayrollRun(
+    siteId: number,
+    salaryMonthInput: Date,
+  ) {
     if (Number.isNaN(salaryMonthInput.getTime())) {
       throw new BadRequestException('Salary month is invalid.');
     }
 
     const salaryMonth = this.normalizeSalaryMonth(salaryMonthInput);
 
+    const site =
+      await this.complianceReportsRepository.findSiteById(siteId);
+
+    if (!site) {
+      throw new NotFoundException(
+        `Site with ID ${siteId} not found.`,
+      );
+    }
+
     const payrollRun =
       await this.complianceReportsRepository.findCurrentPayrollRunWithSnapshots(
+        siteId,
         salaryMonth,
       );
 
     if (!payrollRun) {
       throw new NotFoundException(
-        `No current finalized Payroll Run found for ${salaryMonth.toISOString()}.`,
+        `No current finalized Payroll Run found for Site ${siteId} and ${salaryMonth.toISOString()}.`,
       );
     }
 
     return {
+      site,
       salaryMonth,
       payrollRun,
     };
@@ -98,9 +112,12 @@ export class ComplianceReportsService {
   // snapshot are included.
   // =========================================================
 
-  async getPfAnnexure(salaryMonthInput: Date) {
+  async getPfAnnexure(
+    siteId: number,
+    salaryMonthInput: Date,
+  ) {
     const { salaryMonth, payrollRun } =
-      await this.getCurrentPayrollRun(salaryMonthInput);
+      await this.getCurrentPayrollRun(siteId, salaryMonthInput);
 
     const employees = payrollRun.snapshots.map((snapshot, index) => {
       const wagesBasicDa = this.money(snapshot.wages);
@@ -221,9 +238,12 @@ export class ComplianceReportsService {
   // snapshot are included.
   // =========================================================
 
-  async getEsicAnnexure(salaryMonthInput: Date) {
+  async getEsicAnnexure(
+    siteId: number,
+    salaryMonthInput: Date,
+  ) {
     const { salaryMonth, payrollRun } =
-      await this.getCurrentPayrollRun(salaryMonthInput);
+      await this.getCurrentPayrollRun(siteId, salaryMonthInput);
 
     const employees = payrollRun.snapshots.map((snapshot, index) => {
       const grossPay = this.money(snapshot.gross);
@@ -342,9 +362,12 @@ export class ComplianceReportsService {
   // snapshot are included.
   // =========================================================
 
-  async getPtaxAnnexure(salaryMonthInput: Date) {
+  async getPtaxAnnexure(
+    siteId: number,
+    salaryMonthInput: Date,
+  ) {
     const { salaryMonth, payrollRun } =
-      await this.getCurrentPayrollRun(salaryMonthInput);
+      await this.getCurrentPayrollRun(siteId, salaryMonthInput);
 
     const employees = payrollRun.snapshots.map((snapshot, index) => {
       return {

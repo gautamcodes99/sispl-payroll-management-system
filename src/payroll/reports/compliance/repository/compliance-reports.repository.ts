@@ -6,6 +6,19 @@ import { PrismaService } from '../../../../prisma/prisma.service';
 export class ComplianceReportsRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  async findSiteById(siteId: number) {
+    return this.prisma.site.findUnique({
+      where: {
+        id: siteId,
+      },
+
+      select: {
+        id: true,
+        siteName: true,
+      },
+    });
+  }
+
   // =========================================================
   // CURRENT PAYROLL RUN FOR COMPLIANCE REPORTING
   //
@@ -26,9 +39,13 @@ export class ComplianceReportsRepository {
   // not independently remove employees from the snapshot.
   // =========================================================
 
-  async findCurrentPayrollRunWithSnapshots(salaryMonth: Date) {
+  async findCurrentPayrollRunWithSnapshots(
+    siteId: number,
+    salaryMonth: Date,
+  ) {
     return this.prisma.payrollRun.findFirst({
       where: {
+        siteId,
         salaryMonth,
 
         status: {
