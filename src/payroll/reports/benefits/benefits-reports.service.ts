@@ -602,9 +602,22 @@ export class BenefitsReportsService {
     const employees = employeeContexts.map((employee, index) => {
       const leavePayment = leavePaymentByEmployeeId.get(employee.employeeId);
 
+      // Form 20 payment remark must follow the same
+      // Leave qualification rule as Leave Pay Bank Transfer.
+      // Historical payment records are preserved, but an
+      // UNQUALIFIED employee must never show a paid remark.
+      const qualifiedForLeavePayment =
+        employee.months.reduce(
+          (total, month) =>
+            total + month.rawDaysPerformed,
+          0,
+        ) >= 90;
+
       const paymentRemark =
-        leavePayment?.status === 'PAID' && leavePayment.paymentDate
-          ? `Paid - ${String(leavePayment.paymentDate.getUTCDate()).padStart(
+        qualifiedForLeavePayment &&
+        leavePayment?.status === 'PAID' &&
+        leavePayment.paymentDate
+          ? `Paid: ${String(leavePayment.paymentDate.getUTCDate()).padStart(
               2,
               '0',
             )}/${String(leavePayment.paymentDate.getUTCMonth() + 1).padStart(
