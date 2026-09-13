@@ -142,28 +142,29 @@ export class PayrollReportsController {
   // =========================================================
   // FORM XIII - REGISTER OF ADVANCES
   //
-  // Company-wide statutory Deduction Report.
+  // Site-wise statutory Deduction Report.
   //
   // Advance position comes from the established Manual
-  // Deduction advance ledger.
+  // Deduction advance ledger for the selected Site/month.
   //
-  // Earnings come from the current persisted Payroll
+  // Earnings come from the selected Site's persisted Payroll
   // Employee Snapshot.
   // =========================================================
 
   @Get('register-of-advances')
   async getRegisterOfAdvances(@Query() query: RegisterOfAdvancesQueryDto) {
     return this.payrollReportsService.getRegisterOfAdvances(
+      query.siteId,
       new Date(query.salaryMonth),
     );
   }
   // =========================================================
   // FORM XVI - REGISTER OF DEDUCTIONS FOR DAMAGES OR LOSS
   //
-  // Company-wide statutory Deduction Report.
+  // Site-wise statutory Deduction Report.
   //
-  // Other Deduction from the persisted Payroll Snapshot is
-  // treated as Amount of Deduction Imposed.
+  // Other Deduction from the selected Site's persisted Payroll
+  // Snapshot is treated as Amount of Deduction Imposed.
   // =========================================================
 
   @Get('register-of-damages-or-loss')
@@ -171,21 +172,23 @@ export class PayrollReportsController {
     @Query() query: RegisterOfDamagesOrLossQueryDto,
   ) {
     return this.payrollReportsService.getRegisterOfDamagesOrLoss(
+      query.siteId,
       new Date(query.salaryMonth),
     );
   }
   // =========================================================
   // FORM XVII - REGISTER OF FINES
   //
-  // Company-wide statutory Deduction Report.
+  // Site-wise statutory Deduction Report.
   //
-  // Fine amount comes from the persisted Payroll Snapshot.
-  // Department is intentionally not used.
+  // Fine amount comes from the selected Site's persisted
+  // Payroll Snapshot. Department is intentionally not used.
   // =========================================================
 
   @Get('register-of-fines')
   async getRegisterOfFines(@Query() query: RegisterOfFinesQueryDto) {
     return this.payrollReportsService.getRegisterOfFines(
+      query.siteId,
       new Date(query.salaryMonth),
     );
   }
@@ -198,6 +201,7 @@ export class PayrollReportsController {
     @Query() query: OverallDeductionSummaryQueryDto,
   ) {
     return this.payrollReportsService.getOverallDeductionSummary(
+      query.siteId,
       new Date(query.salaryMonth),
     );
   }

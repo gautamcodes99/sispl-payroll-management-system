@@ -39,15 +39,12 @@ export class PayrollReportsRepository {
 
   async findCurrentPayrollRunWithSnapshots(
     salaryMonth: Date,
-    siteId?: number | null,
+    siteId: number | null,
   ) {
     return this.prisma.payrollRun.findFirst({
       where: {
+        siteId,
         salaryMonth,
-
-        ...(siteId !== undefined && {
-          siteId,
-        }),
 
         status: {
           in: [PayrollRunStatus.FINALIZED, PayrollRunStatus.UNLOCKED],

@@ -1418,7 +1418,7 @@ export class PayrollReportsService {
   // =========================================================
   // FORM XIII - REGISTER OF ADVANCES
   //
-  // Company-wide statutory Deduction Report.
+  // Site-wise statutory Deduction Report.
   //
   // Sources:
   // - PayrollEmployeeSnapshot:
@@ -1442,19 +1442,28 @@ export class PayrollReportsService {
   // - Signature / Thumb Impression = BANK TRANSFER
   // =========================================================
 
-  async getRegisterOfAdvances(salaryMonthInput: Date) {
+  async getRegisterOfAdvances(
+    siteId: number,
+    salaryMonthInput: Date,
+  ) {
     if (Number.isNaN(salaryMonthInput.getTime())) {
       throw new BadRequestException('Salary month is invalid.');
     }
 
     const salaryMonth = this.normalizeSalaryMonth(salaryMonthInput);
 
+    await this.getSiteOrThrow(siteId);
+
     const [payrollRun, advanceRows] = await Promise.all([
       this.payrollReportsRepository.findCurrentPayrollRunWithSnapshots(
         salaryMonth,
+        siteId,
       ),
 
-      this.manualDeductionService.findMonthlySheet(salaryMonth.toISOString()),
+      this.manualDeductionService.findMonthlySheet(
+        salaryMonth.toISOString(),
+        siteId,
+      ),
     ]);
 
     if (!payrollRun) {
@@ -1564,7 +1573,7 @@ export class PayrollReportsService {
   // =========================================================
   // FORM XVI - REGISTER OF DEDUCTIONS FOR DAMAGES OR LOSS
   //
-  // Company-wide statutory Deduction Report.
+  // Site-wise statutory Deduction Report.
   //
   // Source of deduction:
   // PayrollEmployeeSnapshot.otherDeduction
@@ -1582,16 +1591,22 @@ export class PayrollReportsService {
   // - Unsupported statutory fields remain blank.
   // =========================================================
 
-  async getRegisterOfDamagesOrLoss(salaryMonthInput: Date) {
+  async getRegisterOfDamagesOrLoss(
+    siteId: number,
+    salaryMonthInput: Date,
+  ) {
     if (Number.isNaN(salaryMonthInput.getTime())) {
       throw new BadRequestException('Salary month is invalid.');
     }
 
     const salaryMonth = this.normalizeSalaryMonth(salaryMonthInput);
 
+    await this.getSiteOrThrow(siteId);
+
     const payrollRun =
       await this.payrollReportsRepository.findCurrentPayrollRunWithSnapshots(
         salaryMonth,
+        siteId,
       );
 
     if (!payrollRun) {
@@ -1698,7 +1713,7 @@ export class PayrollReportsService {
   // =========================================================
   // FORM XVII - REGISTER OF FINES
   //
-  // Company-wide statutory Deduction Report.
+  // Site-wise statutory Deduction Report.
   //
   // Source of truth:
   // PayrollEmployeeSnapshot
@@ -1715,16 +1730,22 @@ export class PayrollReportsService {
   // - Unsupported statutory fields remain blank.
   // =========================================================
 
-  async getRegisterOfFines(salaryMonthInput: Date) {
+  async getRegisterOfFines(
+    siteId: number,
+    salaryMonthInput: Date,
+  ) {
     if (Number.isNaN(salaryMonthInput.getTime())) {
       throw new BadRequestException('Salary month is invalid.');
     }
 
     const salaryMonth = this.normalizeSalaryMonth(salaryMonthInput);
 
+    await this.getSiteOrThrow(siteId);
+
     const payrollRun =
       await this.payrollReportsRepository.findCurrentPayrollRunWithSnapshots(
         salaryMonth,
+        siteId,
       );
 
     if (!payrollRun) {
@@ -1831,7 +1852,7 @@ export class PayrollReportsService {
   // =========================================================
   // OVERALL DEDUCTION SUMMARY
   //
-  // Company-wide internal Deduction Report.
+  // Site-wise internal Deduction Report.
   //
   // Source of truth:
   // Manual Deduction monthly sheet / advance ledger.
@@ -1840,23 +1861,32 @@ export class PayrollReportsService {
   // - Includes current-month deductions.
   // - Includes carried/pending advance balances.
   // - No Designation column.
-  // - No Site / Work Type / Department filtering.
+  // - Site is mandatory; Work Type / Department are not report filters.
   // - Advance values come from the established advance ledger.
   // =========================================================
 
-  async getOverallDeductionSummary(salaryMonthInput: Date) {
+  async getOverallDeductionSummary(
+    siteId: number,
+    salaryMonthInput: Date,
+  ) {
     if (Number.isNaN(salaryMonthInput.getTime())) {
       throw new BadRequestException('Salary month is invalid.');
     }
 
     const salaryMonth = this.normalizeSalaryMonth(salaryMonthInput);
 
+    await this.getSiteOrThrow(siteId);
+
     const [payrollRun, monthlySheet] = await Promise.all([
       this.payrollReportsRepository.findCurrentPayrollRunWithSnapshots(
         salaryMonth,
+        siteId,
       ),
 
-      this.manualDeductionService.findMonthlySheet(salaryMonth.toISOString()),
+      this.manualDeductionService.findMonthlySheet(
+        salaryMonth.toISOString(),
+        siteId,
+      ),
     ]);
 
     if (!payrollRun) {

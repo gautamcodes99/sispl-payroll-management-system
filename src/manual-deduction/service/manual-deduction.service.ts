@@ -577,45 +577,16 @@ export class ManualDeductionService {
   //
   // HTTP route always supplies siteId.
   //
-  // siteId omitted is supported temporarily only because the
-  // existing Payroll Reports service directly calls
-  // findMonthlySheet(salaryMonth).
+  // Site is mandatory for the Monthly Manual Deduction Sheet.
   //
-  // That compatibility branch will be removed when Payroll
-  // Reports are converted to Site-wise.
-  // =========================================================
+  // Current-month rows and eligibility are Site-scoped.
+  // Advance history remains employee-ledger based across Sites.  // =========================================================
 
   async findMonthlySheet(
     salaryMonthInput: string,
-    siteId?: number,
+    siteId: number,
   ) {
     const salaryMonth = this.normalizeSalaryMonth(salaryMonthInput);
-
-    if (siteId === undefined) {
-      const currentRows =
-        await this.manualDeductionRepository.findAllLegacy(
-          undefined,
-          salaryMonth,
-        );
-
-      const historicalEmployeeIds =
-        await this.manualDeductionRepository.findEmployeeIdsWithAdvanceHistoryBeforeMonth(
-          salaryMonth,
-        );
-
-      const employeeIds = Array.from(
-        new Set([
-          ...currentRows.map((row) => row.employeeId),
-          ...historicalEmployeeIds.map((row) => row.employeeId),
-        ]),
-      );
-
-      return this.buildMonthlySheetRows(
-        salaryMonth,
-        currentRows,
-        employeeIds,
-      );
-    }
 
     const selectedSite = await this.validateSiteExists(siteId);
 
