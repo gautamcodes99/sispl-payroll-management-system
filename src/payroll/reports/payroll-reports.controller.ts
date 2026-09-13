@@ -35,20 +35,28 @@ export class PayrollReportsController {
 
   @Get('wage-sheet')
   async getWageSheet(@Query() query: WageSheetQueryDto) {
-    return this.payrollReportsService.getWageSheet(new Date(query.salaryMonth));
+    return this.payrollReportsService.getWageSheet(
+      query.siteId,
+      new Date(query.salaryMonth),
+    );
   }
 
   // =========================================================
   // FORM II - MUSTER ROLL CUM WAGE REGISTER
   //
-  // Company-wide statutory Payroll Report.
+  // Site-wise statutory Payroll Report.
   //
-  // No Site / Work Type / Department filters.
+  // Payroll values come from the selected Site's persisted
+  // Payroll Run snapshot. Daily Attendance is restricted to
+  // the same Site.
   // =========================================================
 
   @Get('form-ii')
   async getFormIi(@Query() query: FormIiQueryDto) {
-    return this.payrollReportsService.getFormIi(new Date(query.salaryMonth));
+    return this.payrollReportsService.getFormIi(
+      query.siteId,
+      new Date(query.salaryMonth),
+    );
   }
   // =========================================================
   // BANK TRANSFER - UPDATE SINGLE PAYMENT
@@ -87,6 +95,7 @@ export class PayrollReportsController {
   @Get('salary-register')
   async getSalaryRegister(@Query() query: SalaryRegisterQueryDto) {
     return this.payrollReportsService.getSalaryRegister(
+      query.siteId,
       new Date(query.salaryMonth),
     );
   }
@@ -98,31 +107,35 @@ export class PayrollReportsController {
   @Get('bank-transfer')
   async getBankTransferStatement(@Query() query: BankTransferQueryDto) {
     return this.payrollReportsService.getBankTransferStatement(
+      query.siteId,
       new Date(query.salaryMonth),
     );
   }
   // =========================================================
   // PAYSLIP
   //
-  // Company-wide monthly Payslip report.
-  // Site is derived per employee from monthly Attendance.
+  // Site-wise monthly Payslip report.
+  // Historical Site comes from PayrollEmployeeSnapshot.
   // =========================================================
 
   @Get('payslip')
   async getPayslip(@Query() query: PayslipQueryDto) {
-    return this.payrollReportsService.getPayslip(new Date(query.salaryMonth));
+    return this.payrollReportsService.getPayslip(
+      query.siteId,
+      new Date(query.salaryMonth),
+    );
   }
   // =========================================================
   // HRA REGISTER - FORM A
   //
-  // Company-wide statutory Payroll Report.
-  //
-  // No Site / Work Type / Department filters.
+  // Site-wise statutory Payroll Report.
+  // Uses the selected Site's persisted Payroll Run snapshot.
   // =========================================================
 
   @Get('hra-register')
   async getHraRegister(@Query() query: HraRegisterQueryDto) {
     return this.payrollReportsService.getHraRegister(
+      query.siteId,
       new Date(query.salaryMonth),
     );
   }

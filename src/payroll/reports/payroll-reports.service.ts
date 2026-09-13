@@ -38,6 +38,23 @@ export class PayrollReportsService {
   }
 
   // =========================================================
+  // SITE
+  // =========================================================
+
+  private async getSiteOrThrow(siteId: number) {
+    const site =
+      await this.payrollReportsRepository.findSiteById(siteId);
+
+    if (!site) {
+      throw new NotFoundException(
+        `Site with ID ${siteId} not found.`,
+      );
+    }
+
+    return site;
+  }
+
+  // =========================================================
   // WAGE SHEET
   //
   // Internal SISPL company Wage Sheet.
@@ -65,16 +82,19 @@ export class PayrollReportsService {
   // UNPAID / null date / null mode.
   // =========================================================
 
-  async getWageSheet(salaryMonthInput: Date) {
+  async getWageSheet(siteId: number, salaryMonthInput: Date) {
     if (Number.isNaN(salaryMonthInput.getTime())) {
       throw new BadRequestException('Salary month is invalid.');
     }
 
     const salaryMonth = this.normalizeSalaryMonth(salaryMonthInput);
 
+    await this.getSiteOrThrow(siteId);
+
     const payrollRun =
       await this.payrollReportsRepository.findCurrentPayrollRunWithSnapshotsAndPayments(
         salaryMonth,
+        siteId,
       );
 
     if (!payrollRun) {
@@ -403,16 +423,19 @@ export class PayrollReportsService {
   // - Leave with Wages BM:BP
   // =========================================================
 
-  async getFormIi(salaryMonthInput: Date) {
+  async getFormIi(siteId: number, salaryMonthInput: Date) {
     if (Number.isNaN(salaryMonthInput.getTime())) {
       throw new BadRequestException('Salary month is invalid.');
     }
 
     const salaryMonth = this.normalizeSalaryMonth(salaryMonthInput);
 
+    await this.getSiteOrThrow(siteId);
+
     const payrollRun =
       await this.payrollReportsRepository.findCurrentPayrollRunWithSnapshots(
         salaryMonth,
+        siteId,
       );
 
     if (!payrollRun) {
@@ -429,6 +452,7 @@ export class PayrollReportsService {
       this.payrollReportsRepository.findFormIiMonthlyAttendance(
         salaryMonth,
         employeeIds,
+        siteId,
       ),
 
       this.payrollReportsRepository.findFormIiEmployeeDetails(employeeIds),
@@ -738,16 +762,19 @@ export class PayrollReportsService {
   // from payment status.
   // =========================================================
 
-  async getSalaryRegister(salaryMonthInput: Date) {
+  async getSalaryRegister(siteId: number, salaryMonthInput: Date) {
     if (Number.isNaN(salaryMonthInput.getTime())) {
       throw new BadRequestException('Salary month is invalid.');
     }
 
     const salaryMonth = this.normalizeSalaryMonth(salaryMonthInput);
 
+    await this.getSiteOrThrow(siteId);
+
     const payrollRun =
       await this.payrollReportsRepository.findCurrentPayrollRunWithSnapshotsAndPayments(
         salaryMonth,
+        siteId,
       );
 
     if (!payrollRun) {
@@ -1000,16 +1027,19 @@ export class PayrollReportsService {
   // UNPAID / null date / null mode.
   // =========================================================
 
-  async getBankTransferStatement(salaryMonthInput: Date) {
+  async getBankTransferStatement(siteId: number, salaryMonthInput: Date) {
     if (Number.isNaN(salaryMonthInput.getTime())) {
       throw new BadRequestException('Salary month is invalid.');
     }
 
     const salaryMonth = this.normalizeSalaryMonth(salaryMonthInput);
 
+    await this.getSiteOrThrow(siteId);
+
     const payrollRun =
       await this.payrollReportsRepository.findCurrentPayrollRunWithSnapshotsAndPayments(
         salaryMonth,
+        siteId,
       );
 
     if (!payrollRun) {
@@ -1104,22 +1134,14 @@ export class PayrollReportsService {
   // =========================================================
   // PAYSLIP
   //
-  // Company-wide Payroll Report.
+  // Site-wise Payroll Report.
   //
   // Payroll monetary values come exclusively from the current
-  // persisted FINALIZED / UNLOCKED Payroll Employee Snapshot.
+  // persisted FINALIZED / UNLOCKED Payroll Employee Snapshot
+  // for the selected Site.
   //
-  // Site is Payslip display context and is derived separately
-  // from monthly Attendance.
-  //
-  // Site selection:
-  // - PRESENT      = 1 payable day
-  // - HALF_DAY     = 0.5 payable day
-  // - PAID_HOLIDAY = 1 payable day
-  // - all other statuses = 0
-  //
-  // The Site(s) with the highest payable attendance are shown.
-  // Equal highest totals retain all tied Sites.
+  // Historical Site is snapshot.siteName.
+  // Current Attendance is not used to determine Payslip Site.
   //
   // RATE PER DAY is Payslip-only:
   //
@@ -1134,17 +1156,19 @@ export class PayrollReportsService {
   // Adjusted Days   = 0.00
   // Other Allowance = 0.00
   // =========================================================
-
-  async getPayslip(salaryMonthInput: Date) {
+  async getPayslip(siteId: number, salaryMonthInput: Date) {
     if (Number.isNaN(salaryMonthInput.getTime())) {
       throw new BadRequestException('Salary month is invalid.');
     }
 
     const salaryMonth = this.normalizeSalaryMonth(salaryMonthInput);
 
+    await this.getSiteOrThrow(siteId);
+
     const payrollRun =
       await this.payrollReportsRepository.findCurrentPayrollRunWithSnapshots(
         salaryMonth,
+        siteId,
       );
 
     if (!payrollRun) {
@@ -1153,93 +1177,7 @@ export class PayrollReportsService {
       );
     }
 
-    const employeeIds = payrollRun.snapshots.map(
-      (snapshot) => snapshot.employeeId,
-    );
-
-    const siteAttendances =
-      await this.payrollReportsRepository.findPayslipMonthlySiteAttendance(
-        salaryMonth,
-        employeeIds,
-      );
-
-    const sitePayableDaysByEmployee = new Map<
-      number,
-      Map<number, { siteName: string; payableDays: number }>
-    >();
-
-    for (const attendance of siteAttendances) {
-      const site = attendance.department?.workType?.site;
-
-      if (!site) {
-        continue;
-      }
-
-      let payableValue = 0;
-
-      switch (attendance.status) {
-        case 'PRESENT':
-          payableValue = 1;
-          break;
-
-        case 'HALF_DAY':
-          payableValue = 0.5;
-          break;
-
-        case 'PAID_HOLIDAY':
-          payableValue = 1;
-          break;
-
-        default:
-          payableValue = 0;
-          break;
-      }
-
-      if (payableValue === 0) {
-        continue;
-      }
-
-      let employeeSites = sitePayableDaysByEmployee.get(attendance.employeeId);
-
-      if (!employeeSites) {
-        employeeSites = new Map<
-          number,
-          { siteName: string; payableDays: number }
-        >();
-
-        sitePayableDaysByEmployee.set(attendance.employeeId, employeeSites);
-      }
-
-      const currentSite = employeeSites.get(site.id);
-
-      if (currentSite) {
-        currentSite.payableDays += payableValue;
-      } else {
-        employeeSites.set(site.id, {
-          siteName: site.siteName,
-          payableDays: payableValue,
-        });
-      }
-    }
-
     const employees = payrollRun.snapshots.map((snapshot, index) => {
-      const employeeSites = sitePayableDaysByEmployee.get(snapshot.employeeId);
-
-      let siteNames: string[] = [];
-
-      if (employeeSites && employeeSites.size > 0) {
-        const sites = Array.from(employeeSites.values());
-
-        const highestPayableDays = Math.max(
-          ...sites.map((site) => site.payableDays),
-        );
-
-        siteNames = sites
-          .filter((site) => site.payableDays === highestPayableDays)
-          .map((site) => site.siteName)
-          .sort((a, b) => a.localeCompare(b));
-      }
-
       const monthlyBasic = this.money(snapshot.monthlyBasic);
       const monthlyDa = this.money(snapshot.monthlyDa);
 
@@ -1260,7 +1198,7 @@ export class PayrollReportsService {
         gender: snapshot.gender,
         designation: snapshot.designationName,
 
-        siteName: siteNames.length > 0 ? siteNames.join(', ') : null,
+        siteName: snapshot.siteName,
 
         uanNumber: snapshot.uanNumber,
         esicNumber: snapshot.esicNumber,
@@ -1383,16 +1321,19 @@ export class PayrollReportsService {
   // remain blank for now.
   // =========================================================
 
-  async getHraRegister(salaryMonthInput: Date) {
+  async getHraRegister(siteId: number, salaryMonthInput: Date) {
     if (Number.isNaN(salaryMonthInput.getTime())) {
       throw new BadRequestException('Salary month is invalid.');
     }
 
     const salaryMonth = this.normalizeSalaryMonth(salaryMonthInput);
 
+    await this.getSiteOrThrow(siteId);
+
     const payrollRun =
       await this.payrollReportsRepository.findCurrentPayrollRunWithSnapshotsAndPayments(
         salaryMonth,
+        siteId,
       );
 
     if (!payrollRun) {
@@ -2106,6 +2047,7 @@ export class PayrollReportsService {
     const currentRun =
       await this.payrollReportsRepository.findCurrentPayrollRunWithSnapshots(
         snapshot!.payrollRun.salaryMonth,
+        snapshot!.payrollRun.siteId,
       );
 
     if (
@@ -2207,6 +2149,7 @@ export class PayrollReportsService {
     const currentRun =
       await this.payrollReportsRepository.findCurrentPayrollRunWithSnapshots(
         salaryMonth,
+        snapshots[0].payrollRun.siteId,
       );
 
     if (

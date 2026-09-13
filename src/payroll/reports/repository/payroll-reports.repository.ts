@@ -7,6 +7,23 @@ export class PayrollReportsRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   // =========================================================
+  // SITE
+  // =========================================================
+
+  async findSiteById(siteId: number) {
+    return this.prisma.site.findUnique({
+      where: {
+        id: siteId,
+      },
+
+      select: {
+        id: true,
+        siteName: true,
+      },
+    });
+  }
+
+  // =========================================================
   // CURRENT PAYROLL RUN FOR REPORTING
   //
   // Reports must use the persisted Payroll Employee Snapshot,
@@ -20,10 +37,17 @@ export class PayrollReportsRepository {
   // SUPERSEDED historical versions are not selected here.
   // =========================================================
 
-  async findCurrentPayrollRunWithSnapshots(salaryMonth: Date) {
+  async findCurrentPayrollRunWithSnapshots(
+    salaryMonth: Date,
+    siteId?: number | null,
+  ) {
     return this.prisma.payrollRun.findFirst({
       where: {
         salaryMonth,
+
+        ...(siteId !== undefined && {
+          siteId,
+        }),
 
         status: {
           in: [PayrollRunStatus.FINALIZED, PayrollRunStatus.UNLOCKED],
@@ -80,7 +104,11 @@ export class PayrollReportsRepository {
   // No Site / Work Type / Department filtering.
   // =========================================================
 
-  async findFormIiMonthlyAttendance(salaryMonth: Date, employeeIds: number[]) {
+  async findFormIiMonthlyAttendance(
+    salaryMonth: Date,
+    employeeIds: number[],
+    siteId: number,
+  ) {
     if (employeeIds.length === 0) {
       return [];
     }
@@ -97,6 +125,16 @@ export class PayrollReportsRepository {
       where: {
         employeeId: {
           in: employeeIds,
+        },
+
+        department: {
+          is: {
+            workType: {
+              is: {
+                siteId,
+              },
+            },
+          },
         },
 
         attendanceDate: {
@@ -188,6 +226,7 @@ export class PayrollReportsRepository {
         payrollRun: {
           select: {
             id: true,
+            siteId: true,
             salaryMonth: true,
             version: true,
             status: true,
@@ -237,6 +276,7 @@ export class PayrollReportsRepository {
         payrollRun: {
           select: {
             id: true,
+            siteId: true,
             salaryMonth: true,
             version: true,
             status: true,
@@ -333,9 +373,13 @@ export class PayrollReportsRepository {
   // Salary values are never recalculated here.
   // =========================================================
 
-  async findCurrentPayrollRunWithSnapshotsAndPayments(salaryMonth: Date) {
+  async findCurrentPayrollRunWithSnapshotsAndPayments(
+    salaryMonth: Date,
+    siteId: number,
+  ) {
     return this.prisma.payrollRun.findFirst({
       where: {
+        siteId,
         salaryMonth,
 
         status: {
@@ -370,89 +414,6 @@ export class PayrollReportsRepository {
 
           include: {
             payment: true,
-          },
-        },
-      },
-    });
-  }
-  // =========================================================
-  // PAYSLIP - MONTHLY SITE ATTENDANCE
-  //
-  // Payslip is company-wide, but each employee's payslip must
-  // display the Site(s) where the employee earned the highest
-  // payable attendance during the salary month.
-  //
-  // Payable attendance:
-  // PRESENT      = 1
-  // HALF_DAY     = 0.5
-  // PAID_HOLIDAY = 1
-  //
-  // Site is derived through:
-  // Attendance -> Department -> Work Type -> Site
-  //
-  // OT hours do not participate in Site selection.
-  // =========================================================
-
-  async findPayslipMonthlySiteAttendance(
-    salaryMonth: Date,
-    employeeIds: number[],
-  ) {
-    if (employeeIds.length === 0) {
-      return [];
-    }
-
-    const startDate = new Date(
-      Date.UTC(salaryMonth.getUTCFullYear(), salaryMonth.getUTCMonth(), 1),
-    );
-
-    const endDate = new Date(
-      Date.UTC(salaryMonth.getUTCFullYear(), salaryMonth.getUTCMonth() + 1, 1),
-    );
-
-    return this.prisma.attendance.findMany({
-      where: {
-        employeeId: {
-          in: employeeIds,
-        },
-
-        attendanceDate: {
-          gte: startDate,
-          lt: endDate,
-        },
-
-        departmentId: {
-          not: null,
-        },
-      },
-
-      orderBy: [
-        {
-          employeeId: 'asc',
-        },
-        {
-          attendanceDate: 'asc',
-        },
-        {
-          shift: 'asc',
-        },
-      ],
-
-      select: {
-        employeeId: true,
-        status: true,
-
-        department: {
-          select: {
-            workType: {
-              select: {
-                site: {
-                  select: {
-                    id: true,
-                    siteName: true,
-                  },
-                },
-              },
-            },
           },
         },
       },
