@@ -1,12 +1,12 @@
 import { Type } from 'class-transformer';
 import { IsDateString, IsInt, Min } from 'class-validator';
 
-export class MonthlyManualDeductionSheetQueryDto {
+export class VariableAllowanceEligibleEmployeesQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  siteId!: number;
+  siteId: number;
 
   @IsDateString()
-  salaryMonth!: string;
+  salaryMonth: string;
 }

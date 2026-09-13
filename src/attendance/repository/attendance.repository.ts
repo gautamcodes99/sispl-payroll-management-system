@@ -237,21 +237,41 @@ export class AttendanceRepository {
     });
   }
   // =========================================================
-  // FINALIZED PAYROLL RUN FOR MONTH
+  // FINALIZED PAYROLL RUN FOR SITE + MONTH
   //
-  // Used by Attendance Service to enforce the locked rule:
+  // New Site-wise payroll:
   //
-  // FINALIZED payroll month = Attendance locked
-  // UNLOCKED payroll month  = Attendance editable
+  // - Site FINALIZED locks only that Site/month.
+  // - UNLOCKED / SUPERSEDED do not lock.
+  // - Legacy PayrollRun.siteId = NULL + FINALIZED remains a
+  //   company-wide safety lock.
   //
-  // SUPERSEDED historical runs do not lock Attendance.
+  // When siteId is NULL here, the Attendance row itself has
+  // no provable Site context. We therefore conservatively
+  // treat any FINALIZED payroll in that month as a lock.
   // =========================================================
 
-  async findFinalizedPayrollRunForMonth(salaryMonth: Date) {
+  async findFinalizedPayrollRunForSiteAndMonth(
+    siteId: number | null,
+    salaryMonth: Date,
+  ) {
     return this.prisma.payrollRun.findFirst({
       where: {
         salaryMonth,
         status: 'FINALIZED',
+
+        ...(siteId === null
+          ? {}
+          : {
+              OR: [
+                {
+                  siteId,
+                },
+                {
+                  siteId: null,
+                },
+              ],
+            }),
       },
 
       orderBy: {
@@ -260,6 +280,7 @@ export class AttendanceRepository {
 
       select: {
         id: true,
+        siteId: true,
         version: true,
         salaryMonth: true,
         status: true,

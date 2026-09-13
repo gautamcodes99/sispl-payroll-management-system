@@ -4,22 +4,55 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { AttendanceStatus } from '@prisma/client';
 import { CreateManualDeductionDto } from '../dto/create-manual-deduction.dto';
+import { ManualDeductionEligibleEmployeesQueryDto } from '../dto/manual-deduction-eligible-employees-query.dto';
 import { ManualDeductionQueryDto } from '../dto/manual-deduction-query.dto';
 import { UpdateManualDeductionDto } from '../dto/update-manual-deduction.dto';
 import { ManualDeductionRepository } from '../repository/manual-deduction.repository';
 
+type ManualDeductionListRow = Awaited<
+  ReturnType<ManualDeductionRepository['findAll']>
+>[number];
+
 @Injectable()
 export class ManualDeductionService {
+  private readonly payrollAttendanceStatuses =
+    new Set<AttendanceStatus>([
+      AttendanceStatus.PRESENT,
+      AttendanceStatus.HALF_DAY,
+      AttendanceStatus.PAID_HOLIDAY,
+    ]);
+
   constructor(
     private readonly manualDeductionRepository: ManualDeductionRepository,
   ) {}
+
+  // =========================================================
+  // SALARY MONTH
+  // =========================================================
 
   private normalizeSalaryMonth(salaryMonth: string): Date {
     const date = new Date(salaryMonth);
 
     return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
   }
+
+  private getPeriodEndExclusive(salaryMonth: Date): Date {
+    return new Date(
+      Date.UTC(
+        salaryMonth.getUTCFullYear(),
+        salaryMonth.getUTCMonth() + 1,
+        1,
+      ),
+    );
+  }
+
+  // =========================================================
+  // ADVANCE LEDGER
+  //
+  // Existing calculation is preserved exactly.
+  // =========================================================
 
   private calculateAdvanceHistory(
     history: Array<{
@@ -35,17 +68,11 @@ export class ManualDeductionService {
       const newAdvance = Number(row.newAdvance);
       const advanceRecovery = Number(row.advanceRecovery);
 
-      // A new advance starts/adds to the tracked advance ledger.
       if (newAdvance > 0) {
         advanceBalance += newAdvance;
         remainingInstallments += row.numberOfInstallments;
       }
 
-      // Recovery can reduce only an advance balance that actually exists
-      // in the revised advance ledger.
-      //
-      // This intentionally ignores historical legacy advanceRecovery rows
-      // that existed before any tracked newAdvance was entered.
       if (advanceRecovery > 0 && advanceBalance > 0) {
         const actualRecovery = Math.min(advanceRecovery, advanceBalance);
 
@@ -56,7 +83,6 @@ export class ManualDeductionService {
         }
       }
 
-      // Once fully recovered, there can be no remaining installments.
       if (advanceBalance <= 0) {
         advanceBalance = 0;
         remainingInstallments = 0;
@@ -99,25 +125,177 @@ export class ManualDeductionService {
   }
 
   // =========================================================
-  // PAYROLL LOCK
-  //
-  // FINALIZED = Manual Deduction locked
-  // UNLOCKED  = corrections allowed
-  // SUPERSEDED historical runs do not lock the month
+  // SITE
   // =========================================================
 
-  private async validateSalaryMonthUnlocked(salaryMonth: Date): Promise<void> {
+  private async validateSiteExists(siteId: number) {
+    const site = await this.manualDeductionRepository.findSiteById(siteId);
+
+    if (!site) {
+      throw new NotFoundException(`Site with ID ${siteId} not found.`);
+    }
+
+    return site;
+  }
+
+  // =========================================================
+  // EMPLOYEE MONTHLY PAYROLL SITE
+  //
+  // Locked rule:
+  // one employee -> one payroll Site -> one salary month.
+  //
+  // Attendance and Daily OT Site context are both validated.
+  // =========================================================
+
+  private async resolveEmployeePayrollSite(
+    employeeId: number,
+    salaryMonth: Date,
+  ) {
+    const periodEndExclusive = this.getPeriodEndExclusive(salaryMonth);
+
+    const [attendances, otAttendances] = await Promise.all([
+      this.manualDeductionRepository.findMonthlyAttendanceSiteRows(
+        employeeId,
+        salaryMonth,
+        periodEndExclusive,
+      ),
+      this.manualDeductionRepository.findMonthlyOtAttendanceSiteRows(
+        employeeId,
+        salaryMonth,
+        periodEndExclusive,
+      ),
+    ]);
+
+    const sites = new Map<
+      number,
+      {
+        id: number;
+        siteName: string;
+      }
+    >();
+
+    let hasPayrollRelevantAttendance = false;
+    let hasPayrollRelevantAttendanceWithoutSite = false;
+    let hasOtWithoutSite = false;
+
+    for (const attendance of attendances) {
+      const site = attendance.department?.workType.site;
+
+      if (site) {
+        sites.set(site.id, site);
+      }
+
+      if (this.payrollAttendanceStatuses.has(attendance.status)) {
+        hasPayrollRelevantAttendance = true;
+
+        if (!site) {
+          hasPayrollRelevantAttendanceWithoutSite = true;
+        }
+      }
+    }
+
+    for (const otAttendance of otAttendances) {
+      const site = otAttendance.department?.workType.site;
+
+      if (site) {
+        sites.set(site.id, site);
+      } else if (Number(otAttendance.otHours) > 0) {
+        hasOtWithoutSite = true;
+      }
+    }
+
+    if (hasPayrollRelevantAttendanceWithoutSite) {
+      throw new ConflictException(
+        `Employee ${employeeId} has payroll-relevant attendance without Site context for ${salaryMonth.toISOString()}. Correct attendance before maintaining Manual Deduction.`,
+      );
+    }
+
+    if (hasOtWithoutSite) {
+      throw new ConflictException(
+        `Employee ${employeeId} has OT attendance without Site context for ${salaryMonth.toISOString()}. Correct Daily OT before maintaining Manual Deduction.`,
+      );
+    }
+
+    if (sites.size > 1) {
+      const siteList = Array.from(sites.values())
+        .map((site) => `${site.id} - ${site.siteName}`)
+        .join(', ');
+
+      throw new ConflictException(
+        `Employee ${employeeId} belongs to multiple payroll Sites for ${salaryMonth.toISOString()}: ${siteList}. Correct attendance Site before processing payroll or maintaining Manual Deduction.`,
+      );
+    }
+
+    if (!hasPayrollRelevantAttendance) {
+      throw new ConflictException(
+        `Employee ${employeeId} has no payroll-relevant attendance for ${salaryMonth.toISOString()}. Manual Deduction cannot be maintained for this salary month.`,
+      );
+    }
+
+    const site = Array.from(sites.values())[0];
+
+    if (!site) {
+      throw new ConflictException(
+        `Employee ${employeeId} has no valid payroll Site for ${salaryMonth.toISOString()}. Correct attendance before maintaining Manual Deduction.`,
+      );
+    }
+
+    return site;
+  }
+
+  private async validateEmployeeBelongsToSite(
+    employeeId: number,
+    siteId: number,
+    salaryMonth: Date,
+  ) {
+    const employeeSite = await this.resolveEmployeePayrollSite(
+      employeeId,
+      salaryMonth,
+    );
+
+    if (employeeSite.id !== siteId) {
+      throw new ConflictException(
+        `Employee ${employeeId} belongs to Site ${employeeSite.id} - ${employeeSite.siteName} for ${salaryMonth.toISOString()}, not Site ${siteId}.`,
+      );
+    }
+
+    return employeeSite;
+  }
+
+  // =========================================================
+  // PAYROLL LOCK
+  // =========================================================
+
+  private async validateSalaryMonthUnlocked(
+    siteId: number,
+    salaryMonth: Date,
+  ): Promise<void> {
     const finalizedPayroll =
-      await this.manualDeductionRepository.findFinalizedPayrollRunForMonth(
+      await this.manualDeductionRepository.findFinalizedPayrollRunForSiteAndMonth(
+        siteId,
         salaryMonth,
       );
 
     if (finalizedPayroll) {
+      const lockScope =
+        finalizedPayroll.siteId === null
+          ? 'legacy global payroll'
+          : `Site ${siteId}`;
+
       throw new ConflictException(
-        `Manual Deduction for ${salaryMonth.toISOString()} is locked because Payroll Run version ${finalizedPayroll.version} is finalized. Unlock payroll before modifying deductions.`,
+        `Manual Deduction for ${salaryMonth.toISOString()} is locked by finalized Payroll Run version ${finalizedPayroll.version} for ${lockScope}. Unlock payroll before modifying deductions.`,
       );
     }
   }
+
+  // =========================================================
+  // ADVANCE POSITION
+  //
+  // Deliberately NOT Site-filtered.
+  //
+  // Outstanding employee advance must continue if the employee
+  // later moves to another Site.
+  // =========================================================
 
   private async getAdvancePositionBeforeMonth(
     employeeId: number,
@@ -132,7 +310,13 @@ export class ManualDeductionService {
     return this.calculateAdvanceHistory(history);
   }
 
+  // =========================================================
+  // CREATE
+  // =========================================================
+
   async create(dto: CreateManualDeductionDto) {
+    await this.validateSiteExists(dto.siteId);
+
     const employee = await this.manualDeductionRepository.findEmployeeById(
       dto.employeeId,
     );
@@ -145,7 +329,13 @@ export class ManualDeductionService {
 
     const salaryMonth = this.normalizeSalaryMonth(dto.salaryMonth);
 
-    await this.validateSalaryMonthUnlocked(salaryMonth);
+    await this.validateEmployeeBelongsToSite(
+      dto.employeeId,
+      dto.siteId,
+      salaryMonth,
+    );
+
+    await this.validateSalaryMonthUnlocked(dto.siteId, salaryMonth);
 
     const existing =
       await this.manualDeductionRepository.findByEmployeeAndMonth(
@@ -181,6 +371,11 @@ export class ManualDeductionService {
           id: dto.employeeId,
         },
       },
+      site: {
+        connect: {
+          id: dto.siteId,
+        },
+      },
       salaryMonth,
       newAdvance,
       numberOfInstallments,
@@ -193,37 +388,93 @@ export class ManualDeductionService {
     });
   }
 
+  // =========================================================
+  // SITE-WISE LIST
+  // =========================================================
+
   async findAll(query: ManualDeductionQueryDto) {
+    await this.validateSiteExists(query.siteId);
+
     const salaryMonth = query.salaryMonth
       ? this.normalizeSalaryMonth(query.salaryMonth)
       : undefined;
 
     return this.manualDeductionRepository.findAll(
+      query.siteId,
       query.employeeId,
       salaryMonth,
     );
   }
 
-  async findMonthlySheet(salaryMonthInput: string) {
-    const salaryMonth = this.normalizeSalaryMonth(salaryMonthInput);
+  // =========================================================
+  // ELIGIBLE EMPLOYEES
+  // =========================================================
 
-    const currentRows = await this.manualDeductionRepository.findAll(
-      undefined,
-      salaryMonth,
-    );
+  async findEligibleEmployees(
+    query: ManualDeductionEligibleEmployeesQueryDto,
+  ) {
+    const selectedSite = await this.validateSiteExists(query.siteId);
 
-    const historicalEmployeeIds =
-      await this.manualDeductionRepository.findEmployeeIdsWithAdvanceHistoryBeforeMonth(
+    const salaryMonth = this.normalizeSalaryMonth(query.salaryMonth);
+    const periodEndExclusive = this.getPeriodEndExclusive(salaryMonth);
+
+    const candidates =
+      await this.manualDeductionRepository.findMonthlyPayrollCandidatesForSite(
+        query.siteId,
         salaryMonth,
+        periodEndExclusive,
       );
 
-    const employeeIds = Array.from(
-      new Set([
-        ...currentRows.map((row) => row.employeeId),
-        ...historicalEmployeeIds.map((row) => row.employeeId),
-      ]),
-    );
+    const eligibleEmployees: Array<
+      (typeof candidates)[number] & {
+        site: {
+          id: number;
+          siteName: string;
+        };
+      }
+    > = [];
 
+    for (const employee of candidates) {
+      try {
+        const employeeSite = await this.resolveEmployeePayrollSite(
+          employee.id,
+          salaryMonth,
+        );
+
+        if (employeeSite.id === query.siteId) {
+          eligibleEmployees.push({
+            ...employee,
+            site: {
+              id: selectedSite.id,
+              siteName: selectedSite.siteName,
+            },
+          });
+        }
+      } catch (error) {
+        if (error instanceof ConflictException) {
+          continue;
+        }
+
+        throw error;
+      }
+    }
+
+    return eligibleEmployees;
+  }
+
+  // =========================================================
+  // MONTHLY SHEET ROW BUILDER
+  // =========================================================
+
+  private async buildMonthlySheetRows(
+    salaryMonth: Date,
+    currentRows: ManualDeductionListRow[],
+    employeeIds: number[],
+    site?: {
+      id: number;
+      siteName: string;
+    },
+  ) {
     if (employeeIds.length === 0) {
       return [];
     }
@@ -261,10 +512,9 @@ export class ManualDeductionService {
       historyMap.set(row.employeeId, employeeHistory);
     }
 
-    const rows = employees
+    return employees
       .map((employee) => {
         const currentRow = currentRowMap.get(employee.id);
-
         const history = historyMap.get(employee.id) ?? [];
 
         const { oldAdvance, remainingInstallments } =
@@ -281,7 +531,6 @@ export class ManualDeductionService {
           : 0;
 
         const totalAdvance = oldAdvance + newAdvance;
-
         const closingAdvance = Math.max(0, totalAdvance - advanceRecovery);
 
         const installmentsForMonth =
@@ -292,6 +541,11 @@ export class ManualDeductionService {
           employeeId: employee.id,
           employeeName: `${employee.firstName} ${employee.lastName}`.trim(),
           designation: employee.designation?.designationName ?? null,
+
+          ...(site && {
+            siteId: site.id,
+            siteName: site.siteName,
+          }),
 
           salaryMonth,
 
@@ -316,9 +570,87 @@ export class ManualDeductionService {
       })
       .filter((row) => row.id !== null || row.oldAdvance > 0)
       .sort((a, b) => a.employeeId - b.employeeId);
-
-    return rows;
   }
+
+  // =========================================================
+  // MONTHLY SHEET
+  //
+  // HTTP route always supplies siteId.
+  //
+  // siteId omitted is supported temporarily only because the
+  // existing Payroll Reports service directly calls
+  // findMonthlySheet(salaryMonth).
+  //
+  // That compatibility branch will be removed when Payroll
+  // Reports are converted to Site-wise.
+  // =========================================================
+
+  async findMonthlySheet(
+    salaryMonthInput: string,
+    siteId?: number,
+  ) {
+    const salaryMonth = this.normalizeSalaryMonth(salaryMonthInput);
+
+    if (siteId === undefined) {
+      const currentRows =
+        await this.manualDeductionRepository.findAllLegacy(
+          undefined,
+          salaryMonth,
+        );
+
+      const historicalEmployeeIds =
+        await this.manualDeductionRepository.findEmployeeIdsWithAdvanceHistoryBeforeMonth(
+          salaryMonth,
+        );
+
+      const employeeIds = Array.from(
+        new Set([
+          ...currentRows.map((row) => row.employeeId),
+          ...historicalEmployeeIds.map((row) => row.employeeId),
+        ]),
+      );
+
+      return this.buildMonthlySheetRows(
+        salaryMonth,
+        currentRows,
+        employeeIds,
+      );
+    }
+
+    const selectedSite = await this.validateSiteExists(siteId);
+
+    const currentRows = await this.manualDeductionRepository.findAll(
+      siteId,
+      undefined,
+      salaryMonth,
+    );
+
+    const eligibleEmployees = await this.findEligibleEmployees({
+      siteId,
+      salaryMonth: salaryMonthInput,
+    });
+
+    const employeeIds = Array.from(
+      new Set([
+        ...currentRows.map((row) => row.employeeId),
+        ...eligibleEmployees.map((employee) => employee.id),
+      ]),
+    );
+
+    return this.buildMonthlySheetRows(
+      salaryMonth,
+      currentRows,
+      employeeIds,
+      {
+        id: selectedSite.id,
+        siteName: selectedSite.siteName,
+      },
+    );
+  }
+
+  // =========================================================
+  // FIND ONE
+  // =========================================================
 
   async findOne(id: number) {
     const manualDeduction = await this.manualDeductionRepository.findById(id);
@@ -330,10 +662,34 @@ export class ManualDeductionService {
     return manualDeduction;
   }
 
+  // =========================================================
+  // UPDATE
+  // =========================================================
+
   async update(id: number, dto: UpdateManualDeductionDto) {
     const manualDeduction = await this.findOne(id);
 
-    await this.validateSalaryMonthUnlocked(manualDeduction.salaryMonth);
+    const employeeSite = await this.resolveEmployeePayrollSite(
+      manualDeduction.employeeId,
+      manualDeduction.salaryMonth,
+    );
+
+    if (
+      manualDeduction.siteId !== null &&
+      manualDeduction.siteId !== employeeSite.id
+    ) {
+      throw new ConflictException(
+        `Manual Deduction ${id} belongs to Site ${manualDeduction.siteId}, but employee ${manualDeduction.employeeId} currently belongs to Site ${employeeSite.id} - ${employeeSite.siteName} for this salary month. Correct attendance before modifying the deduction.`,
+      );
+    }
+
+    const effectiveSiteId =
+      manualDeduction.siteId ?? employeeSite.id;
+
+    await this.validateSalaryMonthUnlocked(
+      effectiveSiteId,
+      manualDeduction.salaryMonth,
+    );
 
     const { oldAdvance } = await this.getAdvancePositionBeforeMonth(
       manualDeduction.employeeId,
@@ -358,18 +714,6 @@ export class ManualDeductionService {
 
     // =====================================================
     // LEGACY ADVANCE RECOVERY COMPATIBILITY
-    //
-    // Before the revised advance ledger was introduced,
-    // ManualDeduction.advanceRecovery could contain an amount
-    // without a corresponding tracked newAdvance.
-    //
-    // Those historical rows must remain editable for unrelated
-    // monthly deductions such as Canteen, Transport, Uniform,
-    // Fine and Other.
-    //
-    // Once the row participates in the revised advance ledger,
-    // or the client explicitly changes an advance field, normal
-    // advance validation applies.
     // =====================================================
 
     const isLegacyAdvanceRecoveryRow =
@@ -392,37 +736,76 @@ export class ManualDeductionService {
     }
 
     return this.manualDeductionRepository.update(id, {
+      ...(manualDeduction.siteId === null && {
+        site: {
+          connect: {
+            id: effectiveSiteId,
+          },
+        },
+      }),
+
       ...(dto.newAdvance !== undefined && {
         newAdvance: dto.newAdvance,
       }),
+
       ...(dto.numberOfInstallments !== undefined && {
         numberOfInstallments: dto.numberOfInstallments,
       }),
+
       ...(dto.advanceRecovery !== undefined && {
         advanceRecovery: dto.advanceRecovery,
       }),
+
       ...(dto.canteen !== undefined && {
         canteen: dto.canteen,
       }),
+
       ...(dto.transport !== undefined && {
         transport: dto.transport,
       }),
+
       ...(dto.uniformRecovery !== undefined && {
         uniformRecovery: dto.uniformRecovery,
       }),
+
       ...(dto.fine !== undefined && {
         fine: dto.fine,
       }),
+
       ...(dto.otherDeduction !== undefined && {
         otherDeduction: dto.otherDeduction,
       }),
     });
   }
 
+  // =========================================================
+  // DELETE
+  // =========================================================
+
   async remove(id: number) {
     const manualDeduction = await this.findOne(id);
 
-    await this.validateSalaryMonthUnlocked(manualDeduction.salaryMonth);
+    const employeeSite = await this.resolveEmployeePayrollSite(
+      manualDeduction.employeeId,
+      manualDeduction.salaryMonth,
+    );
+
+    if (
+      manualDeduction.siteId !== null &&
+      manualDeduction.siteId !== employeeSite.id
+    ) {
+      throw new ConflictException(
+        `Manual Deduction ${id} belongs to Site ${manualDeduction.siteId}, but employee ${manualDeduction.employeeId} currently belongs to Site ${employeeSite.id} - ${employeeSite.siteName} for this salary month. Correct attendance before deleting the deduction.`,
+      );
+    }
+
+    const effectiveSiteId =
+      manualDeduction.siteId ?? employeeSite.id;
+
+    await this.validateSalaryMonthUnlocked(
+      effectiveSiteId,
+      manualDeduction.salaryMonth,
+    );
 
     return this.manualDeductionRepository.delete(id);
   }

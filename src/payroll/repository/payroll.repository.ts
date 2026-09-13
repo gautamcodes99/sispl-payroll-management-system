@@ -1,10 +1,31 @@
 import { Injectable } from '@nestjs/common';
-import { AttendanceStatus, PayrollRunStatus, Prisma } from '@prisma/client';
+import {
+  AttendanceStatus,
+  PayrollRunStatus,
+  Prisma,
+} from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class PayrollRepository {
   constructor(private readonly prisma: PrismaService) {}
+
+  // =========================================================
+  // SITE
+  // =========================================================
+
+  async findSiteById(siteId: number) {
+    return this.prisma.site.findUnique({
+      where: {
+        id: siteId,
+      },
+
+      select: {
+        id: true,
+        siteName: true,
+      },
+    });
+  }
 
   // =========================================================
   // EMPLOYEE
@@ -23,38 +44,32 @@ export class PayrollRepository {
   }
 
   // =========================================================
-  // COMPANY-WIDE MONTHLY PAYROLL EMPLOYEES
+  // SITE-WISE MONTHLY PAYROLL EMPLOYEES
   //
-  // Payroll is generated only for employees who have at least
-  // one payroll-relevant attendance row in the requested
-  // salary month.
+  // Payroll eligibility remains exactly:
   //
-  // Payroll-relevant attendance:
   // PRESENT
   // HALF_DAY
   // PAID_HOLIDAY
   //
-  // Current Employee status is intentionally NOT used here.
-  // An employee who later becomes INACTIVE / RESIGNED /
-  // TERMINATED must still be included in a historical salary
-  // month if they worked during that month.
+  // ABSENT / WEEKLY_OFF / HOLIDAY / LEAVE / no-attendance do
+  // not independently qualify an employee.
   //
-  // ABSENT / WEEKLY_OFF / HOLIDAY / LEAVE and no-attendance
-  // employees do not independently qualify for payroll.
+  // OT also does not independently qualify an employee.
   //
-  // OT also does not independently establish payroll
-  // eligibility; it remains supplementary to payable
-  // attendance.
+  // Current employee status does not remove an employee who
+  // worked during the requested historical salary month.
   // =========================================================
 
   async findMonthlyPayrollEmployees(
+    siteId: number,
     periodStart: Date,
     periodEndExclusive: Date,
   ) {
     const payrollStatuses: AttendanceStatus[] = [
-      'PRESENT',
-      'HALF_DAY',
-      'PAID_HOLIDAY',
+      AttendanceStatus.PRESENT,
+      AttendanceStatus.HALF_DAY,
+      AttendanceStatus.PAID_HOLIDAY,
     ];
 
     return this.prisma.employee.findMany({
@@ -68,6 +83,16 @@ export class PayrollRepository {
 
             status: {
               in: payrollStatuses,
+            },
+
+            department: {
+              is: {
+                workType: {
+                  is: {
+                    siteId,
+                  },
+                },
+              },
             },
           },
         },
@@ -89,16 +114,13 @@ export class PayrollRepository {
   // =========================================================
   // APPLICABLE COMPANY-WIDE WAGE MASTER
   //
-  // Wage Master belongs to company-wide Designation.
-  //
-  // The Wage Master applicable on the first day of the salary
-  // month is used.
-  //
-  // Historical SUPERSEDED Wage Masters remain valid where
-  // their effective period covers the requested salary month.
+  // Wage Master calculation/rules remain unchanged.
   // =========================================================
 
-  async findApplicableWageMaster(designationId: number, salaryMonth: Date) {
+  async findApplicableWageMaster(
+    designationId: number,
+    salaryMonth: Date,
+  ) {
     return this.prisma.wageMaster.findFirst({
       where: {
         designationId,
@@ -141,13 +163,14 @@ export class PayrollRepository {
   }
 
   // =========================================================
-  // MONTHLY ATTENDANCE
+  // MONTHLY ATTENDANCE SITE CONTEXT
   //
-  // Daily Attendance is the source of payable-day statuses.
-  // OT hours are stored separately in OtAttendance.
+  // These queries intentionally read ALL monthly rows.
+  //
+  // They are used only for one-employee-one-Site validation.
   // =========================================================
 
-  async findMonthlyAttendance(
+  async findMonthlyAttendanceSiteRows(
     employeeId: number,
     periodStart: Date,
     periodEndExclusive: Date,
@@ -159,6 +182,101 @@ export class PayrollRepository {
         attendanceDate: {
           gte: periodStart,
           lt: periodEndExclusive,
+        },
+      },
+
+      select: {
+        status: true,
+        departmentId: true,
+
+        department: {
+          select: {
+            workType: {
+              select: {
+                site: {
+                  select: {
+                    id: true,
+                    siteName: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  // =========================================================
+  // MONTHLY OT SITE CONTEXT
+  // =========================================================
+
+  async findMonthlyOtAttendanceSiteRows(
+    employeeId: number,
+    periodStart: Date,
+    periodEndExclusive: Date,
+  ) {
+    return this.prisma.otAttendance.findMany({
+      where: {
+        employeeId,
+
+        attendanceDate: {
+          gte: periodStart,
+          lt: periodEndExclusive,
+        },
+      },
+
+      select: {
+        otHours: true,
+        departmentId: true,
+
+        department: {
+          select: {
+            workType: {
+              select: {
+                site: {
+                  select: {
+                    id: true,
+                    siteName: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  // =========================================================
+  // SITE-WISE MONTHLY ATTENDANCE
+  //
+  // Only validated selected-Site rows enter calculation.
+  // =========================================================
+
+  async findMonthlyAttendance(
+    employeeId: number,
+    siteId: number,
+    periodStart: Date,
+    periodEndExclusive: Date,
+  ) {
+    return this.prisma.attendance.findMany({
+      where: {
+        employeeId,
+
+        attendanceDate: {
+          gte: periodStart,
+          lt: periodEndExclusive,
+        },
+
+        department: {
+          is: {
+            workType: {
+              is: {
+                siteId,
+              },
+            },
+          },
         },
       },
 
@@ -180,14 +298,14 @@ export class PayrollRepository {
   }
 
   // =========================================================
-  // MONTHLY OT ATTENDANCE
+  // SITE-WISE MONTHLY OT ATTENDANCE
   //
-  // Manual OT source for Payroll.
-  // Every legitimate employee/date/shift OT row is included.
+  // OT remains manually entered in Daily OT Attendance.
   // =========================================================
 
   async findMonthlyOtAttendance(
     employeeId: number,
+    siteId: number,
     periodStart: Date,
     periodEndExclusive: Date,
   ) {
@@ -198,6 +316,16 @@ export class PayrollRepository {
         attendanceDate: {
           gte: periodStart,
           lt: periodEndExclusive,
+        },
+
+        department: {
+          is: {
+            workType: {
+              is: {
+                siteId,
+              },
+            },
+          },
         },
       },
 
@@ -220,9 +348,15 @@ export class PayrollRepository {
 
   // =========================================================
   // VARIABLE ALLOWANCE
+  //
+  // Unique key intentionally remains employee + salaryMonth.
+  // Site ownership is validated in Service.
   // =========================================================
 
-  async findVariableAllowance(employeeId: number, salaryMonth: Date) {
+  async findVariableAllowance(
+    employeeId: number,
+    salaryMonth: Date,
+  ) {
     return this.prisma.variableAllowance.findUnique({
       where: {
         employeeId_salaryMonth: {
@@ -235,9 +369,15 @@ export class PayrollRepository {
 
   // =========================================================
   // MANUAL DEDUCTION
+  //
+  // Unique key intentionally remains employee + salaryMonth.
+  // Site ownership is validated in Service.
   // =========================================================
 
-  async findManualDeduction(employeeId: number, salaryMonth: Date) {
+  async findManualDeduction(
+    employeeId: number,
+    salaryMonth: Date,
+  ) {
     return this.prisma.manualDeduction.findUnique({
       where: {
         employeeId_salaryMonth: {
@@ -249,12 +389,17 @@ export class PayrollRepository {
   }
 
   // =========================================================
-  // PAYROLL RUN HISTORY
+  // SITE-WISE PAYROLL RUN HISTORY
   // =========================================================
 
-  async findPayrollRuns(salaryMonth?: Date) {
+  async findPayrollRuns(
+    siteId: number,
+    salaryMonth?: Date,
+  ) {
     return this.prisma.payrollRun.findMany({
       where: {
+        siteId,
+
         ...(salaryMonth !== undefined && {
           salaryMonth,
         }),
@@ -270,6 +415,8 @@ export class PayrollRepository {
       ],
 
       include: {
+        site: true,
+
         _count: {
           select: {
             snapshots: true,
@@ -280,16 +427,23 @@ export class PayrollRepository {
   }
 
   // =========================================================
-  // CURRENT PAYROLL RUN WITH SNAPSHOTS
+  // CURRENT SITE-WISE RUN WITH SNAPSHOTS
   // =========================================================
 
-  async findCurrentPayrollRunWithSnapshots(salaryMonth: Date) {
+  async findCurrentPayrollRunWithSnapshots(
+    siteId: number,
+    salaryMonth: Date,
+  ) {
     return this.prisma.payrollRun.findFirst({
       where: {
+        siteId,
         salaryMonth,
 
         status: {
-          in: [PayrollRunStatus.FINALIZED, PayrollRunStatus.UNLOCKED],
+          in: [
+            PayrollRunStatus.FINALIZED,
+            PayrollRunStatus.UNLOCKED,
+          ],
         },
       },
 
@@ -298,6 +452,8 @@ export class PayrollRepository {
       },
 
       include: {
+        site: true,
+
         snapshots: {
           orderBy: {
             employeeId: 'asc',
@@ -309,6 +465,9 @@ export class PayrollRepository {
 
   // =========================================================
   // FIND PAYROLL RUN BY ID
+  //
+  // ID lookup remains valid for both new Site-wise runs and
+  // preserved legacy global runs.
   // =========================================================
 
   async findPayrollRunById(id: number) {
@@ -318,6 +477,8 @@ export class PayrollRepository {
       },
 
       include: {
+        site: true,
+
         snapshots: {
           orderBy: {
             employeeId: 'asc',
@@ -328,16 +489,26 @@ export class PayrollRepository {
   }
 
   // =========================================================
-  // CURRENT PAYROLL RUN
+  // CURRENT RUN FOR AN EXACT SITE SCOPE
+  //
+  // siteId may be NULL only when checking preserved legacy
+  // company-wide runs during unlock.
   // =========================================================
 
-  async findCurrentPayrollRun(salaryMonth: Date) {
+  async findCurrentPayrollRun(
+    siteId: number | null,
+    salaryMonth: Date,
+  ) {
     return this.prisma.payrollRun.findFirst({
       where: {
+        siteId,
         salaryMonth,
 
         status: {
-          in: [PayrollRunStatus.FINALIZED, PayrollRunStatus.UNLOCKED],
+          in: [
+            PayrollRunStatus.FINALIZED,
+            PayrollRunStatus.UNLOCKED,
+          ],
         },
       },
 
@@ -348,12 +519,16 @@ export class PayrollRepository {
   }
 
   // =========================================================
-  // LATEST PAYROLL VERSION
+  // LATEST VERSION FOR SITE + MONTH
   // =========================================================
 
-  async findLatestPayrollRun(salaryMonth: Date) {
+  async findLatestPayrollRun(
+    siteId: number,
+    salaryMonth: Date,
+  ) {
     return this.prisma.payrollRun.findFirst({
       where: {
+        siteId,
         salaryMonth,
       },
 
@@ -364,12 +539,18 @@ export class PayrollRepository {
   }
 
   // =========================================================
-  // FINALIZED PAYROLL FOR MONTH
+  // LEGACY GLOBAL FINALIZED SAFETY LOCK
+  //
+  // Historical siteId NULL FINALIZED payroll represented the
+  // whole company. It therefore remains a global safety lock.
   // =========================================================
 
-  async findFinalizedPayrollRunForMonth(salaryMonth: Date) {
+  async findLegacyFinalizedPayrollRunForMonth(
+    salaryMonth: Date,
+  ) {
     return this.prisma.payrollRun.findFirst({
       where: {
+        siteId: null,
         salaryMonth,
         status: PayrollRunStatus.FINALIZED,
       },
@@ -381,10 +562,11 @@ export class PayrollRepository {
   }
 
   // =========================================================
-  // CREATE FINALIZED PAYROLL
+  // CREATE SITE-WISE FINALIZED PAYROLL
   // =========================================================
 
   async createFinalizedPayrollRun(
+    siteId: number,
     salaryMonth: Date,
     version: number,
     snapshots: Prisma.PayrollEmployeeSnapshotUncheckedCreateWithoutPayrollRunInput[],
@@ -392,8 +574,15 @@ export class PayrollRepository {
     return this.prisma.$transaction(async (tx) => {
       return tx.payrollRun.create({
         data: {
+          site: {
+            connect: {
+              id: siteId,
+            },
+          },
+
           salaryMonth,
           version,
+
           status: PayrollRunStatus.FINALIZED,
           finalizedAt: new Date(),
 
@@ -403,6 +592,8 @@ export class PayrollRepository {
         },
 
         include: {
+          site: true,
+
           snapshots: {
             orderBy: {
               employeeId: 'asc',
@@ -429,6 +620,8 @@ export class PayrollRepository {
       },
 
       include: {
+        site: true,
+
         snapshots: {
           orderBy: {
             employeeId: 'asc',
@@ -439,11 +632,15 @@ export class PayrollRepository {
   }
 
   // =========================================================
-  // REPROCESS PAYROLL
+  // REPROCESS SITE-WISE PAYROLL
+  //
+  // Old UNLOCKED version becomes SUPERSEDED and the new
+  // Site/month version is created atomically.
   // =========================================================
 
   async reprocessPayrollRun(
     oldPayrollRunId: number,
+    siteId: number,
     salaryMonth: Date,
     version: number,
     snapshots: Prisma.PayrollEmployeeSnapshotUncheckedCreateWithoutPayrollRunInput[],
@@ -461,8 +658,15 @@ export class PayrollRepository {
 
       return tx.payrollRun.create({
         data: {
+          site: {
+            connect: {
+              id: siteId,
+            },
+          },
+
           salaryMonth,
           version,
+
           status: PayrollRunStatus.FINALIZED,
           finalizedAt: new Date(),
 
@@ -472,6 +676,8 @@ export class PayrollRepository {
         },
 
         include: {
+          site: true,
+
           snapshots: {
             orderBy: {
               employeeId: 'asc',

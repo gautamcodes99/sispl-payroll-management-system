@@ -20,19 +20,45 @@ export class OtAttendanceService {
     return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
   }
 
-  private async validateMonthUnlocked(attendanceDate: Date): Promise<void> {
+  private async validateSiteMonthUnlocked(
+    attendanceDate: Date,
+    siteId: number | null,
+  ): Promise<void> {
     const salaryMonth = this.normalizeSalaryMonth(attendanceDate);
 
     const finalizedPayroll =
-      await this.otAttendanceRepository.findFinalizedPayrollRunForMonth(
+      await this.otAttendanceRepository.findFinalizedPayrollRunForSiteAndMonth(
+        siteId,
         salaryMonth,
       );
 
     if (finalizedPayroll) {
+      const lockScope =
+        finalizedPayroll.siteId === null
+          ? 'legacy company-wide payroll'
+          : `Site ${finalizedPayroll.siteId}`;
+
       throw new ConflictException(
-        `OT Attendance for ${salaryMonth.toISOString()} is locked because Payroll Run version ${finalizedPayroll.version} is finalized. Unlock payroll before modifying OT attendance.`,
+        `OT Attendance for ${salaryMonth.toISOString()} is locked because Payroll Run version ${finalizedPayroll.version} is finalized for ${lockScope}. Unlock payroll before modifying OT attendance.`,
       );
     }
+  }
+
+  private async resolveOtAttendanceSiteId(
+    departmentId: number,
+  ): Promise<number> {
+    const department =
+      await this.otAttendanceRepository.findDepartmentContext(
+        departmentId,
+      );
+
+    if (!department) {
+      throw new NotFoundException(
+        `Department with ID ${departmentId} not found.`,
+      );
+    }
+
+    return department.workType.siteId;
   }
 
   private async validateContext(
@@ -122,7 +148,14 @@ export class OtAttendanceService {
   async create(dto: CreateOtAttendanceDto) {
     const attendanceDate = new Date(dto.attendanceDate);
 
-    await this.validateMonthUnlocked(attendanceDate);
+    const siteId = await this.resolveOtAttendanceSiteId(
+      dto.departmentId,
+    );
+
+    await this.validateSiteMonthUnlocked(
+      attendanceDate,
+      siteId,
+    );
 
     await this.validateContext(
       dto.employeeId,
@@ -154,7 +187,14 @@ export class OtAttendanceService {
   async bulkCreate(dto: BulkOtAttendanceDto) {
     const attendanceDate = new Date(dto.attendanceDate);
 
-    await this.validateMonthUnlocked(attendanceDate);
+    const siteId = await this.resolveOtAttendanceSiteId(
+      dto.departmentId,
+    );
+
+    await this.validateSiteMonthUnlocked(
+      attendanceDate,
+      siteId,
+    );
 
     const uniqueEmployeeIds = [...new Set(dto.employeeIds)];
 
@@ -243,21 +283,18 @@ export class OtAttendanceService {
       throw new NotFoundException('OT Attendance record not found.');
     }
 
-    await this.validateMonthUnlocked(current.attendanceDate);
+    const originalSiteId =
+      current.department?.workType.site.id ?? null;
+
+    await this.validateSiteMonthUnlocked(
+      current.attendanceDate,
+      originalSiteId,
+    );
 
     const targetDate = dto.attendanceDate
       ? new Date(dto.attendanceDate)
       : current.attendanceDate;
 
-    const originalMonth = this.normalizeSalaryMonth(
-      current.attendanceDate,
-    ).getTime();
-
-    const targetMonth = this.normalizeSalaryMonth(targetDate).getTime();
-
-    if (originalMonth !== targetMonth) {
-      await this.validateMonthUnlocked(targetDate);
-    }
 
     const employeeId = dto.employeeId ?? current.employee.id;
 
@@ -271,7 +308,31 @@ export class OtAttendanceService {
       );
     }
 
-    await this.validateContext(employeeId, departmentId, designationId);
+    const targetSiteId =
+      await this.resolveOtAttendanceSiteId(departmentId);
+
+    const originalMonth = this.normalizeSalaryMonth(
+      current.attendanceDate,
+    ).getTime();
+
+    const targetMonth =
+      this.normalizeSalaryMonth(targetDate).getTime();
+
+    if (
+      originalMonth !== targetMonth ||
+      originalSiteId !== targetSiteId
+    ) {
+      await this.validateSiteMonthUnlocked(
+        targetDate,
+        targetSiteId,
+      );
+    }
+
+    await this.validateContext(
+      employeeId,
+      departmentId,
+      designationId,
+    );
 
     const targetShift = dto.shift ?? current.shift;
 
@@ -314,7 +375,13 @@ export class OtAttendanceService {
       throw new NotFoundException('OT Attendance record not found.');
     }
 
-    await this.validateMonthUnlocked(record.attendanceDate);
+    const siteId =
+      record.department?.workType.site.id ?? null;
+
+    await this.validateSiteMonthUnlocked(
+      record.attendanceDate,
+      siteId,
+    );
 
     await this.otAttendanceRepository.delete(id);
 

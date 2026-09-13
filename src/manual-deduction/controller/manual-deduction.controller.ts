@@ -10,6 +10,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { CreateManualDeductionDto } from '../dto/create-manual-deduction.dto';
+import { ManualDeductionEligibleEmployeesQueryDto } from '../dto/manual-deduction-eligible-employees-query.dto';
 import { ManualDeductionQueryDto } from '../dto/manual-deduction-query.dto';
 import { MonthlyManualDeductionSheetQueryDto } from '../dto/monthly-manual-deduction-sheet-query.dto';
 import { UpdateManualDeductionDto } from '../dto/update-manual-deduction.dto';
@@ -31,9 +32,19 @@ export class ManualDeductionController {
     return this.manualDeductionService.findAll(query);
   }
 
+  @Get('eligible-employees')
+  async findEligibleEmployees(
+    @Query() query: ManualDeductionEligibleEmployeesQueryDto,
+  ) {
+    return this.manualDeductionService.findEligibleEmployees(query);
+  }
+
   @Get('monthly-sheet')
   async findMonthlySheet(@Query() query: MonthlyManualDeductionSheetQueryDto) {
-    return this.manualDeductionService.findMonthlySheet(query.salaryMonth);
+    return this.manualDeductionService.findMonthlySheet(
+      query.salaryMonth,
+      query.siteId,
+    );
   }
 
   @Get(':id')

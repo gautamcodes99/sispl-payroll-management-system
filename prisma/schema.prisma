@@ -54,7 +54,7 @@ model Employee {
 }
 
 model Site {
-  id            Int        @id @default(autoincrement())
+  id            Int      @id @default(autoincrement())
   siteName      String
   address       String?
   city          String?
@@ -62,10 +62,14 @@ model Site {
   pinCode       String?
   contactPerson String?
   contactNumber String?
-  status        String     @default("ACTIVE")
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
-  workTypes     WorkType[]
+  status        String   @default("ACTIVE")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  workTypes          WorkType[]
+  variableAllowances VariableAllowance[]
+  manualDeductions   ManualDeduction[]
+  payrollRuns        PayrollRun[]
 }
 
 model WorkType {
@@ -192,6 +196,7 @@ model SpecialAllowanceSlab {
 model VariableAllowance {
   id          Int      @id @default(autoincrement())
   employeeId  Int
+  siteId      Int?
   salaryMonth DateTime
   conveyance  Decimal  @default(0) @db.Decimal(12, 2)
   arrears     Decimal  @default(0) @db.Decimal(12, 2)
@@ -200,8 +205,10 @@ model VariableAllowance {
   updatedAt   DateTime @updatedAt
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  site     Site?    @relation(fields: [siteId], references: [id], onDelete: Restrict)
 
   @@unique([employeeId, salaryMonth])
+  @@index([siteId, salaryMonth])
   @@index([salaryMonth])
   @@index([employeeId])
 }
@@ -209,6 +216,7 @@ model VariableAllowance {
 model ManualDeduction {
   id          Int      @id @default(autoincrement())
   employeeId  Int
+  siteId      Int?
   salaryMonth DateTime
 
   newAdvance           Decimal @default(0) @db.Decimal(12, 2)
@@ -228,8 +236,10 @@ model ManualDeduction {
   updatedAt DateTime @updatedAt
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  site     Site?    @relation(fields: [siteId], references: [id], onDelete: Restrict)
 
   @@unique([employeeId, salaryMonth])
+  @@index([siteId, salaryMonth])
   @@index([salaryMonth])
   @@index([employeeId])
 }
@@ -249,6 +259,7 @@ model ManualDeduction {
 
 model PayrollRun {
   id          Int              @id @default(autoincrement())
+  siteId      Int?
   salaryMonth DateTime
   version     Int
   status      PayrollRunStatus
@@ -257,9 +268,11 @@ model PayrollRun {
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
+  site      Site?                     @relation(fields: [siteId], references: [id], onDelete: Restrict)
   snapshots PayrollEmployeeSnapshot[]
 
-  @@unique([salaryMonth, version])
+  @@unique([siteId, salaryMonth, version])
+  @@index([siteId, salaryMonth, status])
   @@index([salaryMonth, status])
 }
 

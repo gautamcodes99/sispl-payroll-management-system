@@ -133,11 +133,27 @@ export class OtAttendanceRepository {
     });
   }
 
-  async findFinalizedPayrollRunForMonth(salaryMonth: Date) {
+  async findFinalizedPayrollRunForSiteAndMonth(
+    siteId: number | null,
+    salaryMonth: Date,
+  ) {
     return this.prisma.payrollRun.findFirst({
       where: {
         salaryMonth,
         status: 'FINALIZED',
+
+        ...(siteId === null
+          ? {}
+          : {
+              OR: [
+                {
+                  siteId,
+                },
+                {
+                  siteId: null,
+                },
+              ],
+            }),
       },
 
       orderBy: {
@@ -146,6 +162,7 @@ export class OtAttendanceRepository {
 
       select: {
         id: true,
+        siteId: true,
         version: true,
         salaryMonth: true,
         status: true,

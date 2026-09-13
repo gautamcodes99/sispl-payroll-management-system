@@ -51,21 +51,45 @@ export class AttendanceService {
   // No lock flag is duplicated on Attendance rows.
   // =========================================================
 
-  private async validateAttendanceMonthUnlocked(
+  private async validateAttendanceSiteMonthUnlocked(
     attendanceDate: Date,
+    siteId: number | null,
   ): Promise<void> {
     const salaryMonth = this.normalizeSalaryMonth(attendanceDate);
 
     const finalizedPayroll =
-      await this.attendanceRepository.findFinalizedPayrollRunForMonth(
+      await this.attendanceRepository.findFinalizedPayrollRunForSiteAndMonth(
+        siteId,
         salaryMonth,
       );
 
     if (finalizedPayroll) {
+      const lockScope =
+        finalizedPayroll.siteId === null
+          ? 'legacy company-wide payroll'
+          : `Site ${finalizedPayroll.siteId}`;
+
       throw new ConflictException(
-        `Attendance for ${salaryMonth.toISOString()} is locked because Payroll Run version ${finalizedPayroll.version} is finalized. Unlock payroll before modifying attendance.`,
+        `Attendance for ${salaryMonth.toISOString()} is locked because Payroll Run version ${finalizedPayroll.version} is finalized for ${lockScope}. Unlock payroll before modifying attendance.`,
       );
     }
+  }
+
+  private async resolveAttendanceSiteId(
+    departmentId: number,
+  ): Promise<number> {
+    const department =
+      await this.attendanceRepository.findDepartmentAttendanceContext(
+        departmentId,
+      );
+
+    if (!department) {
+      throw new NotFoundException(
+        `Department with ID ${departmentId} not found.`,
+      );
+    }
+
+    return department.workType.siteId;
   }
 
   // =========================================================
@@ -233,7 +257,14 @@ export class AttendanceService {
   async create(createAttendanceDto: CreateAttendanceDto) {
     const attendanceDate = new Date(createAttendanceDto.attendanceDate);
 
-    await this.validateAttendanceMonthUnlocked(attendanceDate);
+    const siteId = await this.resolveAttendanceSiteId(
+      createAttendanceDto.departmentId,
+    );
+
+    await this.validateAttendanceSiteMonthUnlocked(
+      attendanceDate,
+      siteId,
+    );
 
     await this.validateAttendanceContext(
       createAttendanceDto.employeeId,
@@ -312,7 +343,14 @@ export class AttendanceService {
   async bulkCreateAttendance(bulkAttendanceDto: BulkAttendanceDto) {
     const attendanceDate = new Date(bulkAttendanceDto.attendanceDate);
 
-    await this.validateAttendanceMonthUnlocked(attendanceDate);
+    const siteId = await this.resolveAttendanceSiteId(
+      bulkAttendanceDto.departmentId,
+    );
+
+    await this.validateAttendanceSiteMonthUnlocked(
+      attendanceDate,
+      siteId,
+    );
 
     await this.validateBulkAttendanceContext(
       bulkAttendanceDto.employeeIds,
@@ -2359,7 +2397,13 @@ export class AttendanceService {
     // ORIGINAL MONTH
     // -------------------------------------------------------
 
-    await this.validateAttendanceMonthUnlocked(attendance.attendanceDate);
+    const originalSiteId =
+      attendance.department?.workType.site.id ?? null;
+
+    await this.validateAttendanceSiteMonthUnlocked(
+      attendance.attendanceDate,
+      originalSiteId,
+    );
 
     // -------------------------------------------------------
     // TARGET MONTH
@@ -2367,20 +2411,9 @@ export class AttendanceService {
     // Required only if attendanceDate is being changed.
     // -------------------------------------------------------
 
-    if (updateAttendanceDto.attendanceDate) {
-      const targetAttendanceDate = new Date(updateAttendanceDto.attendanceDate);
-
-      const originalMonth = this.normalizeSalaryMonth(
-        attendance.attendanceDate,
-      ).getTime();
-
-      const targetMonth =
-        this.normalizeSalaryMonth(targetAttendanceDate).getTime();
-
-      if (originalMonth !== targetMonth) {
-        await this.validateAttendanceMonthUnlocked(targetAttendanceDate);
-      }
-    }
+    const targetAttendanceDate = updateAttendanceDto.attendanceDate
+      ? new Date(updateAttendanceDto.attendanceDate)
+      : attendance.attendanceDate;
     const targetEmployeeId =
       updateAttendanceDto.employeeId ?? attendance.employee.id;
 
@@ -2393,6 +2426,26 @@ export class AttendanceService {
     if (!targetDepartmentId) {
       throw new BadRequestException(
         'Attendance must have a Department before it can be updated.',
+      );
+    }
+
+    const targetSiteId =
+      await this.resolveAttendanceSiteId(targetDepartmentId);
+
+    const originalMonth = this.normalizeSalaryMonth(
+      attendance.attendanceDate,
+    ).getTime();
+
+    const targetMonth =
+      this.normalizeSalaryMonth(targetAttendanceDate).getTime();
+
+    if (
+      originalMonth !== targetMonth ||
+      originalSiteId !== targetSiteId
+    ) {
+      await this.validateAttendanceSiteMonthUnlocked(
+        targetAttendanceDate,
+        targetSiteId,
       );
     }
 
@@ -2425,7 +2478,13 @@ export class AttendanceService {
       throw new NotFoundException('Attendance record not found.');
     }
 
-    await this.validateAttendanceMonthUnlocked(attendance.attendanceDate);
+    const siteId =
+      attendance.department?.workType.site.id ?? null;
+
+    await this.validateAttendanceSiteMonthUnlocked(
+      attendance.attendanceDate,
+      siteId,
+    );
 
     await this.attendanceRepository.deleteAttendance(id);
 

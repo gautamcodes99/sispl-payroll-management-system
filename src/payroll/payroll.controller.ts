@@ -43,23 +43,18 @@ export class PayrollController {
         ...payroll.earnings,
 
         monthlyBasic: this.money(payroll.earnings.monthlyBasic),
-
         monthlyDa: this.money(payroll.earnings.monthlyDa),
 
         earnedBasic: this.money(payroll.earnings.earnedBasic),
-
         earnedDa: this.money(payroll.earnings.earnedDa),
 
         wages: this.money(payroll.earnings.wages),
 
         hraPercentage: payroll.earnings.hraPercentage,
-
         hra: this.money(payroll.earnings.hra),
 
         otRate: this.money(payroll.earnings.otRate),
-
         otHours: payroll.earnings.otHours,
-
         otAmount: this.money(payroll.earnings.otAmount),
 
         conveyance: this.money(payroll.earnings.conveyance),
@@ -67,13 +62,16 @@ export class PayrollController {
         specialAllowance: {
           ...payroll.earnings.specialAllowance,
 
-          ratePerDay: this.money(payroll.earnings.specialAllowance.ratePerDay),
+          ratePerDay: this.money(
+            payroll.earnings.specialAllowance.ratePerDay,
+          ),
 
-          amount: this.money(payroll.earnings.specialAllowance.amount),
+          amount: this.money(
+            payroll.earnings.specialAllowance.amount,
+          ),
         },
 
         rab: this.money(payroll.earnings.rab),
-
         arrears: this.money(payroll.earnings.arrears),
 
         gross: this.money(payroll.earnings.gross),
@@ -81,46 +79,47 @@ export class PayrollController {
 
       statutoryDeductions: {
         pf: this.money(payroll.statutoryDeductions.pf),
-
         esic: this.money(payroll.statutoryDeductions.esic),
-
         ptax: this.money(payroll.statutoryDeductions.ptax),
-
         mlwf: this.money(payroll.statutoryDeductions.mlwf),
-
         total: this.money(payroll.statutoryDeductions.total),
       },
 
       manualDeductions: {
-        advanceRecovery: this.money(payroll.manualDeductions.advanceRecovery),
+        advanceRecovery: this.money(
+          payroll.manualDeductions.advanceRecovery,
+        ),
 
         canteen: this.money(payroll.manualDeductions.canteen),
-
         transport: this.money(payroll.manualDeductions.transport),
 
-        uniformRecovery: this.money(payroll.manualDeductions.uniformRecovery),
+        uniformRecovery: this.money(
+          payroll.manualDeductions.uniformRecovery,
+        ),
 
         fine: this.money(payroll.manualDeductions.fine),
 
-        otherDeduction: this.money(payroll.manualDeductions.otherDeduction),
+        otherDeduction: this.money(
+          payroll.manualDeductions.otherDeduction,
+        ),
 
         total: this.money(payroll.manualDeductions.total),
       },
 
       totalDeductions: this.money(payroll.totalDeductions),
-
       netSalary: this.money(payroll.netSalary),
     };
   }
 
   // =========================================================
-  // SINGLE EMPLOYEE PREVIEW
+  // SINGLE EMPLOYEE SITE-WISE PREVIEW
   // =========================================================
 
   @Get('preview')
   async preview(@Query() query: PayrollPreviewQueryDto) {
     const result = await this.payrollCalculationService.calculateEmployee(
       query.employeeId,
+      query.siteId,
       new Date(query.salaryMonth),
     );
 
@@ -132,20 +131,23 @@ export class PayrollController {
   }
 
   // =========================================================
-  // COMPANY-WIDE MONTHLY PREVIEW
+  // SITE-WISE MONTHLY PREVIEW
   // =========================================================
 
   @Get('preview/monthly')
   async monthlyPreview(@Query() query: MonthlyPayrollPreviewQueryDto) {
-    const result = await this.payrollCalculationService.calculateMonthlyPreview(
-      new Date(query.salaryMonth),
-    );
+    const result =
+      await this.payrollCalculationService.calculateMonthlyPreview(
+        query.siteId,
+        new Date(query.salaryMonth),
+      );
 
     return {
       success: true,
       message: 'Monthly payroll preview calculated successfully.',
 
       data: {
+        site: result.site,
         salaryMonth: result.salaryMonth,
 
         employeeCount: result.employeeCount,
@@ -160,16 +162,17 @@ export class PayrollController {
           gross: this.money(result.summary.gross),
 
           pf: this.money(result.summary.pf),
-
           esic: this.money(result.summary.esic),
-
           ptax: this.money(result.summary.ptax),
-
           mlwf: this.money(result.summary.mlwf),
 
-          manualDeductions: this.money(result.summary.manualDeductions),
+          manualDeductions: this.money(
+            result.summary.manualDeductions,
+          ),
 
-          totalDeductions: this.money(result.summary.totalDeductions),
+          totalDeductions: this.money(
+            result.summary.totalDeductions,
+          ),
 
           netSalary: this.money(result.summary.netSalary),
         },
@@ -180,37 +183,48 @@ export class PayrollController {
   }
 
   // =========================================================
-  // FINALIZE PAYROLL
+  // FINALIZE SITE-WISE PAYROLL
   // =========================================================
 
   @Post('finalize')
   async finalize(@Body() dto: FinalizePayrollDto) {
-    return this.payrollService.finalize(new Date(dto.salaryMonth));
+    return this.payrollService.finalize(
+      dto.siteId,
+      new Date(dto.salaryMonth),
+    );
   }
 
   // =========================================================
-  // GET FINALIZED / HISTORICAL PAYROLL RUN
-  // =========================================================
-
-  // =========================================================
-  // PAYROLL RUN HISTORY
+  // SITE-WISE PAYROLL RUN HISTORY
   // =========================================================
 
   @Get('runs')
   async findRuns(@Query() query: PayrollRunQueryDto) {
     return this.payrollService.findRuns(
-      query.salaryMonth ? new Date(query.salaryMonth) : undefined,
+      query.siteId,
+      query.salaryMonth
+        ? new Date(query.salaryMonth)
+        : undefined,
     );
   }
 
   // =========================================================
-  // CURRENT PAYROLL RUN FOR SALARY MONTH
+  // CURRENT SITE-WISE PAYROLL RUN
   // =========================================================
 
   @Get('current')
-  async findCurrent(@Query() query: MonthlyPayrollPreviewQueryDto) {
-    return this.payrollService.findCurrent(new Date(query.salaryMonth));
+  async findCurrent(
+    @Query() query: MonthlyPayrollPreviewQueryDto,
+  ) {
+    return this.payrollService.findCurrent(
+      query.siteId,
+      new Date(query.salaryMonth),
+    );
   }
+
+  // =========================================================
+  // PAYROLL RUN BY ID
+  // =========================================================
 
   @Get('runs/:id')
   async findOne(@Param('id', ParseIntPipe) id: number) {
@@ -228,6 +242,8 @@ export class PayrollController {
 
   // =========================================================
   // REPROCESS PAYROLL
+  //
+  // Site is derived from the existing Payroll Run.
   // =========================================================
 
   @Post('reprocess')

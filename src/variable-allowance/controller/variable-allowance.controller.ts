@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { CreateVariableAllowanceDto } from '../dto/create-variable-allowance.dto';
 import { UpdateVariableAllowanceDto } from '../dto/update-variable-allowance.dto';
+import { VariableAllowanceEligibleEmployeesQueryDto } from '../dto/variable-allowance-eligible-employees-query.dto';
 import { VariableAllowanceQueryDto } from '../dto/variable-allowance-query.dto';
 import { VariableAllowanceService } from '../service/variable-allowance.service';
 
@@ -28,6 +29,13 @@ export class VariableAllowanceController {
   @Get()
   async findAll(@Query() query: VariableAllowanceQueryDto) {
     return this.variableAllowanceService.findAll(query);
+  }
+
+  @Get('eligible-employees')
+  async findEligibleEmployees(
+    @Query() query: VariableAllowanceEligibleEmployeesQueryDto,
+  ) {
+    return this.variableAllowanceService.findEligibleEmployees(query);
   }
 
   @Get(':id')
