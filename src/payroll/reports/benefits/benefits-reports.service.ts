@@ -25,6 +25,19 @@ export class BenefitsReportsService {
     }
   }
 
+  private async validateSite(siteId: number) {
+    const site =
+      await this.benefitsReportsRepository.findSiteById(siteId);
+
+    if (!site) {
+      throw new NotFoundException(
+        `Site with ID ${siteId} not found.`,
+      );
+    }
+
+    return site;
+  }
+
   private number(value: unknown): number {
     return Number(value ?? 0);
   }
@@ -89,14 +102,16 @@ export class BenefitsReportsService {
   // Business calculations retain full precision internally.
   // =========================================================
 
-  async getLeaveWorkingSheet(year: number) {
+  async getLeaveWorkingSheet(siteId: number, year: number) {
     this.validateYear(year);
+    await this.validateSite(siteId);
 
     const yearStart = new Date(Date.UTC(year, 0, 1));
     const nextYearStart = new Date(Date.UTC(year + 1, 0, 1));
 
     const payrollRuns =
       await this.benefitsReportsRepository.findCurrentReportablePayrollRunsForYear(
+        siteId,
         yearStart,
         nextYearStart,
       );
@@ -452,14 +467,16 @@ export class BenefitsReportsService {
   // payment workflow persists payment status/date.
   // =========================================================
 
-  async getForm20(year: number) {
+  async getForm20(siteId: number, year: number) {
     this.validateYear(year);
+    await this.validateSite(siteId);
 
     const yearStart = new Date(Date.UTC(year, 0, 1));
     const nextYearStart = new Date(Date.UTC(year + 1, 0, 1));
 
     const payrollRuns =
       await this.benefitsReportsRepository.findCurrentReportablePayrollRunsForYear(
+        siteId,
         yearStart,
         nextYearStart,
       );
@@ -573,6 +590,7 @@ export class BenefitsReportsService {
 
     const leavePayments =
       await this.benefitsReportsRepository.findLeavePaymentsForYear(
+        siteId,
         year,
         employeeContexts.map((employee) => employee.employeeId),
       );
@@ -844,10 +862,11 @@ export class BenefitsReportsService {
   // Absence of LeavePayment = UNPAID.
   // =========================================================
 
-  async getLeavePayBankTransfer(year: number) {
+  async getLeavePayBankTransfer(siteId: number, year: number) {
     this.validateYear(year);
 
-    const leaveWorkingSheet = await this.getLeaveWorkingSheet(year);
+    const leaveWorkingSheet =
+      await this.getLeaveWorkingSheet(siteId, year);
 
     const sourceEmployees = leaveWorkingSheet.data.employees.filter(
       (employee) => employee.status === 'QUALIFIED',
@@ -857,6 +876,7 @@ export class BenefitsReportsService {
 
     const leavePayments =
       await this.benefitsReportsRepository.findLeavePaymentsForYear(
+        siteId,
         year,
         employeeIds,
       );
@@ -964,7 +984,8 @@ export class BenefitsReportsService {
       );
     }
 
-    const leaveWorkingSheet = await this.getLeaveWorkingSheet(dto.year);
+    const leaveWorkingSheet =
+      await this.getLeaveWorkingSheet(dto.siteId, dto.year);
 
     const eligibleEmployeeIds = new Set(
       leaveWorkingSheet.data.employees
@@ -994,6 +1015,7 @@ export class BenefitsReportsService {
 
     const updatedPayments =
       await this.benefitsReportsRepository.upsertLeavePayments({
+        siteId: dto.siteId,
         leaveYear: dto.year,
         employeeIds: dto.employeeIds,
         status: dto.status,
@@ -1264,8 +1286,9 @@ export class BenefitsReportsService {
   // latest available payroll snapshot within the selected FY.
   // =========================================================
 
-  async getBonusWorkingSheet(financialYear: number) {
+  async getBonusWorkingSheet(siteId: number, financialYear: number) {
     this.validateYear(financialYear);
+    await this.validateSite(siteId);
 
     const bonusSetting =
       await this.benefitsReportsRepository.findBonusSetting(financialYear);
@@ -1300,6 +1323,7 @@ export class BenefitsReportsService {
 
     const payrollRuns =
       await this.benefitsReportsRepository.findCurrentReportablePayrollRunsForYear(
+        siteId,
         financialYearStart,
         nextFinancialYearStart,
       );
@@ -1636,11 +1660,11 @@ export class BenefitsReportsService {
   // Absence of BonusPayment = UNPAID.
   // =========================================================
 
-  async getBonusBankTransfer(financialYear: number) {
+  async getBonusBankTransfer(siteId: number, financialYear: number) {
     this.validateYear(financialYear);
 
     const bonusWorkingSheet =
-      await this.getBonusWorkingSheet(financialYear);
+      await this.getBonusWorkingSheet(siteId, financialYear);
 
     const sourceEmployees =
       bonusWorkingSheet.data.employees.filter(
@@ -1653,6 +1677,7 @@ export class BenefitsReportsService {
 
     const bonusPayments =
       await this.benefitsReportsRepository.findBonusPaymentsForFinancialYear(
+        siteId,
         financialYear,
         employeeIds,
       );
@@ -1781,7 +1806,10 @@ export class BenefitsReportsService {
     }
 
     const bonusWorkingSheet =
-      await this.getBonusWorkingSheet(dto.financialYear);
+      await this.getBonusWorkingSheet(
+        dto.siteId,
+        dto.financialYear,
+      );
 
     const eligibleEmployeeIds = new Set(
       bonusWorkingSheet.data.employees
@@ -1815,6 +1843,7 @@ export class BenefitsReportsService {
 
     const updatedPayments =
       await this.benefitsReportsRepository.upsertBonusPayments({
+        siteId: dto.siteId,
         financialYear: dto.financialYear,
 
         employeeIds: dto.employeeIds,
@@ -1875,11 +1904,11 @@ export class BenefitsReportsService {
   // Remarks remain blank.
   // =========================================================
 
-  async getBonusFormC(financialYear: number) {
+  async getBonusFormC(siteId: number, financialYear: number) {
     this.validateYear(financialYear);
 
     const bonusWorkingSheet =
-      await this.getBonusWorkingSheet(financialYear);
+      await this.getBonusWorkingSheet(siteId, financialYear);
 
     const qualifiedEmployees =
       bonusWorkingSheet.data.employees.filter(
@@ -1892,6 +1921,7 @@ export class BenefitsReportsService {
 
     const bonusPayments =
       await this.benefitsReportsRepository.findBonusPaymentsForFinancialYear(
+        siteId,
         financialYear,
         employeeIds,
       );
@@ -2220,7 +2250,12 @@ export class BenefitsReportsService {
     };
   }
 
-  async getFnFSettlementEmployees(month: string) {
+  async getFnFSettlementEmployees(
+    siteId: number,
+    month: string,
+  ) {
+    await this.validateSite(siteId);
+
     const parsedMonth = new Date(month);
 
     if (Number.isNaN(parsedMonth.getTime())) {
@@ -2245,6 +2280,7 @@ export class BenefitsReportsService {
 
     const employees =
       await this.benefitsReportsRepository.findFnFEmployeesByLeavingMonth(
+        siteId,
         monthStart,
         nextMonthStart,
       );
@@ -2271,7 +2307,12 @@ export class BenefitsReportsService {
     };
   }
 
-  async getFnFSettlement(employeeId: number) {
+  async getFnFSettlement(
+    siteId: number,
+    employeeId: number,
+  ) {
+    await this.validateSite(siteId);
+
     const employee =
       await this.benefitsReportsRepository.findFnFEmployee(
         employeeId,
@@ -2320,12 +2361,14 @@ export class BenefitsReportsService {
       savedSettlement,
     ] = await Promise.all([
       this.benefitsReportsRepository.findFnFLeavingMonthSnapshots(
+        siteId,
         employeeId,
         leavingMonthStart,
         nextMonthStart,
       ),
 
       this.benefitsReportsRepository.findFnFHistoricalSnapshotsThroughMonth(
+        siteId,
         employeeId,
         nextMonthStart,
       ),
@@ -2342,6 +2385,12 @@ export class BenefitsReportsService {
 
     const leavingMonthSnapshot =
       leavingMonthSnapshots[0] ?? null;
+
+    if (!leavingMonthSnapshot) {
+      throw new NotFoundException(
+        `No current reportable payroll snapshot found for employee ${employeeId} at Site ${siteId} for the leaving month.`,
+      );
+    }
 
     const historicalSnapshot =
       historicalSnapshots[0] ??
@@ -2364,7 +2413,10 @@ export class BenefitsReportsService {
 
     try {
       const leaveWorkingSheet =
-        await this.getLeaveWorkingSheet(leaveYear);
+        await this.getLeaveWorkingSheet(
+          siteId,
+          leaveYear,
+        );
 
       const leaveEmployee =
         leaveWorkingSheet.data.employees.find(
@@ -2391,6 +2443,7 @@ export class BenefitsReportsService {
     try {
       const bonusWorkingSheet =
         await this.getBonusWorkingSheet(
+          siteId,
           bonusFinancialYear,
         );
 
@@ -2416,11 +2469,13 @@ export class BenefitsReportsService {
     const [leavePayment, bonusPayment] =
       await Promise.all([
         this.benefitsReportsRepository.findFnFLeavePayment(
+          siteId,
           employeeId,
           leaveYear,
         ),
 
         this.benefitsReportsRepository.findFnFBonusPayment(
+          siteId,
           employeeId,
           bonusFinancialYear,
         ),
@@ -2637,6 +2692,14 @@ export class BenefitsReportsService {
       );
     }
 
+
+    // Validate the selected Site against the employee's
+    // historical leaving-month payroll before saving.
+    await this.getFnFSettlement(
+      dto.siteId,
+      dto.employeeId,
+    );
+
     await this.benefitsReportsRepository.upsertFnFSettlement({
       employeeId: dto.employeeId,
 
@@ -2647,6 +2710,9 @@ export class BenefitsReportsService {
         dto.otherPermissibleDeduction,
     });
 
-    return this.getFnFSettlement(dto.employeeId);
+    return this.getFnFSettlement(
+      dto.siteId,
+      dto.employeeId,
+    );
   }
 }

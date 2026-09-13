@@ -70,6 +70,8 @@ model Site {
   variableAllowances VariableAllowance[]
   manualDeductions   ManualDeduction[]
   payrollRuns        PayrollRun[]
+  leavePayments      LeavePayment[]
+  bonusPayments      BonusPayment[]
 }
 
 model WorkType {
@@ -473,7 +475,7 @@ enum PayrollPaymentMode {
 // LEAVE PAYMENT
 //
 // Stores annual leave encashment payment information for
-// one Employee + Leave Year.
+// one Site + Employee + Leave Year.
 //
 // The calculated leave amount remains derived from the
 // Benefit Reports annual payroll snapshot calculation.
@@ -482,7 +484,8 @@ enum PayrollPaymentMode {
 // =========================================================
 
 model LeavePayment {
-  id         Int @id @default(autoincrement())
+  id         Int  @id @default(autoincrement())
+  siteId     Int?
   employeeId Int
   leaveYear  Int
 
@@ -493,9 +496,11 @@ model LeavePayment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  site     Site?    @relation(fields: [siteId], references: [id], onDelete: Restrict)
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
-  @@unique([employeeId, leaveYear])
+  @@unique([siteId, employeeId, leaveYear])
+  @@index([siteId, leaveYear, status])
   @@index([leaveYear, status])
 }
 
@@ -543,7 +548,7 @@ model BonusSetting {
 // BONUS PAYMENT
 //
 // Stores annual Bonus payment information for one
-// Employee + Financial Year.
+// Site + Employee + Financial Year.
 //
 // financialYear stores the starting year:
 // 2025 = FY 2025-2026.
@@ -555,7 +560,8 @@ model BonusSetting {
 // =========================================================
 
 model BonusPayment {
-  id            Int @id @default(autoincrement())
+  id            Int  @id @default(autoincrement())
+  siteId        Int?
   employeeId    Int
   financialYear Int
 
@@ -566,9 +572,11 @@ model BonusPayment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  site     Site?    @relation(fields: [siteId], references: [id], onDelete: Restrict)
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
-  @@unique([employeeId, financialYear])
+  @@unique([siteId, employeeId, financialYear])
+  @@index([siteId, financialYear, status])
   @@index([financialYear, status])
 }
 

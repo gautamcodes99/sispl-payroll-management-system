@@ -22,17 +22,26 @@ export class BenefitsReportsController {
 
   @Get('leave-working-sheet')
   async getLeaveWorkingSheet(@Query() query: LeaveWorkingSheetQueryDto) {
-    return this.benefitsReportsService.getLeaveWorkingSheet(query.year);
+    return this.benefitsReportsService.getLeaveWorkingSheet(
+      query.siteId,
+      query.year,
+    );
   }
 
   @Get('form-20')
   async getForm20(@Query() query: Form20QueryDto) {
-    return this.benefitsReportsService.getForm20(query.year);
+    return this.benefitsReportsService.getForm20(
+      query.siteId,
+      query.year,
+    );
   }
 
   @Get('leave-pay-bank-transfer')
   async getLeavePayBankTransfer(@Query() query: LeavePayBankTransferQueryDto) {
-    return this.benefitsReportsService.getLeavePayBankTransfer(query.year);
+    return this.benefitsReportsService.getLeavePayBankTransfer(
+      query.siteId,
+      query.year,
+    );
   }
 
   @Patch('leave-payments')
@@ -43,12 +52,14 @@ export class BenefitsReportsController {
   @Get('bonus-working-sheet')
   async getBonusWorkingSheet(@Query() query: BonusWorkingSheetQueryDto) {
     return this.benefitsReportsService.getBonusWorkingSheet(
+      query.siteId,
       query.financialYear,
     );
   }
   @Get('bonus-form-c')
   async getBonusFormC(@Query() query: BonusFormCQueryDto) {
     return this.benefitsReportsService.getBonusFormC(
+      query.siteId,
       query.financialYear,
     );
   }
@@ -56,6 +67,7 @@ export class BenefitsReportsController {
   @Get('bonus-bank-transfer')
   async getBonusBankTransfer(@Query() query: BonusBankTransferQueryDto) {
     return this.benefitsReportsService.getBonusBankTransfer(
+      query.siteId,
       query.financialYear,
     );
   }
@@ -84,6 +96,7 @@ export class BenefitsReportsController {
     @Query() query: FnFSettlementEmployeesQueryDto,
   ) {
     return this.benefitsReportsService.getFnFSettlementEmployees(
+      query.siteId,
       query.month,
     );
   }
@@ -91,6 +104,7 @@ export class BenefitsReportsController {
   @Get('fnf-settlement')
   async getFnFSettlement(@Query() query: FnFSettlementQueryDto) {
     return this.benefitsReportsService.getFnFSettlement(
+      query.siteId,
       query.employeeId,
     );
   }

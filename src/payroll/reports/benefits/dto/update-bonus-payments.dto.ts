@@ -15,6 +15,11 @@ import { BonusPaymentMode, BonusPaymentStatus } from '@prisma/client';
 export class UpdateBonusPaymentsDto {
   @Type(() => Number)
   @IsInt()
+  @Min(1)
+  siteId!: number;
+
+  @Type(() => Number)
+  @IsInt()
   @Min(1900)
   @Max(9999)
   financialYear!: number;

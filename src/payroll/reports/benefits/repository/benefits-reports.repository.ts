@@ -12,6 +12,19 @@ import { PrismaService } from '../../../../prisma/prisma.service';
 export class BenefitsReportsRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  async findSiteById(siteId: number) {
+    return this.prisma.site.findUnique({
+      where: {
+        id: siteId,
+      },
+
+      select: {
+        id: true,
+        siteName: true,
+      },
+    });
+  }
+
   // =========================================================
   // BONUS SETTING
   //
@@ -97,11 +110,14 @@ export class BenefitsReportsRepository {
   // =========================================================
 
   async findCurrentReportablePayrollRunsForYear(
+    siteId: number,
     yearStart: Date,
     nextYearStart: Date,
   ) {
     return this.prisma.payrollRun.findMany({
       where: {
+        siteId,
+
         salaryMonth: {
           gte: yearStart,
           lt: nextYearStart,
@@ -183,6 +199,7 @@ export class BenefitsReportsRepository {
   // =========================================================
 
   async findBonusPaymentsForFinancialYear(
+    siteId: number,
     financialYear: number,
     employeeIds: number[],
   ) {
@@ -192,6 +209,7 @@ export class BenefitsReportsRepository {
 
     return this.prisma.bonusPayment.findMany({
       where: {
+        siteId,
         financialYear,
         employeeId: {
           in: employeeIds,
@@ -215,6 +233,7 @@ export class BenefitsReportsRepository {
     });
   }
   async upsertBonusPayments(params: {
+    siteId: number;
     financialYear: number;
     employeeIds: number[];
     status: BonusPaymentStatus;
@@ -222,6 +241,7 @@ export class BenefitsReportsRepository {
     paymentMode: BonusPaymentMode | null;
   }) {
     const {
+      siteId,
       financialYear,
       employeeIds,
       status,
@@ -233,13 +253,15 @@ export class BenefitsReportsRepository {
       employeeIds.map((employeeId) =>
         this.prisma.bonusPayment.upsert({
           where: {
-            employeeId_financialYear: {
+            siteId_employeeId_financialYear: {
+              siteId,
               employeeId,
               financialYear,
             },
           },
 
           create: {
+            siteId,
             employeeId,
             financialYear,
             status,
@@ -276,13 +298,18 @@ export class BenefitsReportsRepository {
   // Absence of a LeavePayment record is treated by the
   // Service layer as UNPAID.
   // =========================================================
-  async findLeavePaymentsForYear(leaveYear: number, employeeIds: number[]) {
+  async findLeavePaymentsForYear(
+    siteId: number,
+    leaveYear: number,
+    employeeIds: number[],
+  ) {
     if (employeeIds.length === 0) {
       return [];
     }
 
     return this.prisma.leavePayment.findMany({
       where: {
+        siteId,
         leaveYear,
         employeeId: {
           in: employeeIds,
@@ -307,25 +334,35 @@ export class BenefitsReportsRepository {
   }
 
   async upsertLeavePayments(params: {
+    siteId: number;
     leaveYear: number;
     employeeIds: number[];
     status: LeavePaymentStatus;
     paymentDate: Date | null;
     paymentMode: LeavePaymentMode | null;
   }) {
-    const { leaveYear, employeeIds, status, paymentDate, paymentMode } = params;
+    const {
+      siteId,
+      leaveYear,
+      employeeIds,
+      status,
+      paymentDate,
+      paymentMode,
+    } = params;
 
     return this.prisma.$transaction(
       employeeIds.map((employeeId) =>
         this.prisma.leavePayment.upsert({
           where: {
-            employeeId_leaveYear: {
+            siteId_employeeId_leaveYear: {
+              siteId,
               employeeId,
               leaveYear,
             },
           },
 
           create: {
+            siteId,
             employeeId,
             leaveYear,
             status,
@@ -371,6 +408,7 @@ export class BenefitsReportsRepository {
   // =========================================================
 
   async findFnFEmployeesByLeavingMonth(
+    siteId: number,
     monthStart: Date,
     nextMonthStart: Date,
   ) {
@@ -379,6 +417,28 @@ export class BenefitsReportsRepository {
         leftDate: {
           gte: monthStart,
           lt: nextMonthStart,
+        },
+
+        payrollSnapshots: {
+          some: {
+            siteId,
+
+            payrollRun: {
+              siteId,
+
+              salaryMonth: {
+                gte: monthStart,
+                lt: nextMonthStart,
+              },
+
+              status: {
+                in: [
+                  PayrollRunStatus.FINALIZED,
+                  PayrollRunStatus.UNLOCKED,
+                ],
+              },
+            },
+          },
         },
       },
 
@@ -413,6 +473,7 @@ export class BenefitsReportsRepository {
   }
 
   async findFnFLeavingMonthSnapshots(
+    siteId: number,
     employeeId: number,
     leavingMonthStart: Date,
     nextMonthStart: Date,
@@ -422,6 +483,8 @@ export class BenefitsReportsRepository {
         employeeId,
 
         payrollRun: {
+          siteId,
+
           salaryMonth: {
             gte: leavingMonthStart,
             lt: nextMonthStart,
@@ -483,6 +546,7 @@ export class BenefitsReportsRepository {
   }
 
   async findFnFHistoricalSnapshotsThroughMonth(
+    siteId: number,
     employeeId: number,
     nextMonthStart: Date,
   ) {
@@ -491,6 +555,8 @@ export class BenefitsReportsRepository {
         employeeId,
 
         payrollRun: {
+          siteId,
+
           salaryMonth: {
             lt: nextMonthStart,
           },
@@ -546,10 +612,15 @@ export class BenefitsReportsRepository {
     });
   }
 
-  async findFnFLeavePayment(employeeId: number, leaveYear: number) {
+  async findFnFLeavePayment(
+    siteId: number,
+    employeeId: number,
+    leaveYear: number,
+  ) {
     return this.prisma.leavePayment.findUnique({
       where: {
-        employeeId_leaveYear: {
+        siteId_employeeId_leaveYear: {
+          siteId,
           employeeId,
           leaveYear,
         },
@@ -566,12 +637,14 @@ export class BenefitsReportsRepository {
   }
 
   async findFnFBonusPayment(
+    siteId: number,
     employeeId: number,
     financialYear: number,
   ) {
     return this.prisma.bonusPayment.findUnique({
       where: {
-        employeeId_financialYear: {
+        siteId_employeeId_financialYear: {
+          siteId,
           employeeId,
           financialYear,
         },

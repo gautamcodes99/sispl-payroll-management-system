@@ -5,6 +5,11 @@ export class UpdateFnFSettlementDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  siteId!: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
   employeeId!: number;
 
   @Type(() => Number)
