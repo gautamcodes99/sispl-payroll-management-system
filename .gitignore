@@ -72,3 +72,6 @@ Thumbs.db
 
 # Misc
 *.tsbuildinfo
+
+# Runtime uploaded files
+uploads/

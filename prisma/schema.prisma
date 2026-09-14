@@ -713,8 +713,32 @@ model CompanyProfile {
   customers      String? @db.Text
   services       String? @db.Text
 
+  galleryImages CompanyProfileImage[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model CompanyProfileImage {
+  id Int @id @default(autoincrement())
+
+  companyProfileId Int
+
+  fileName     String @unique @db.VarChar(255)
+  originalName String @db.VarChar(255)
+  mimeType     String @db.VarChar(100)
+  fileSize     Int
+
+  caption   String? @db.VarChar(150)
+  sortOrder Int
+  isActive  Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  companyProfile CompanyProfile @relation(fields: [companyProfileId], references: [id], onDelete: Cascade)
+
+  @@index([companyProfileId, sortOrder])
 }
 
 // =========================================================
