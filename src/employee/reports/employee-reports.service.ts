@@ -157,17 +157,22 @@ export class EmployeeReportsService {
   //    - HALF_DAY
   //    - PAID_HOLIDAY
   //
-  // 2. If Employee.leftDate exists, the confirmed HR value
-  //    overrides attendance-derived Last Working Date.
+  // 2. If the employee has qualifying attendance AFTER the
+  //    selected To Date, exclude the employee from this report.
+  //    This applies even when Employee.leftDate exists.
   //
-  // 3. Only after the final Last Working Date is decided do we
+  // 3. Otherwise, if Employee.leftDate exists, the confirmed HR
+  //    value overrides attendance-derived Last Working Date.
+  //
+  // 4. Only after the final Last Working Date is decided do we
   //    apply the requested From Date -> To Date filter.
   //
-  // 4. Employee.status is display-only and does not control
+  // 5. Employee.status is display-only and does not control
   //    inclusion.
   //
-  // This prevents an employee who later worked again from being
-  // incorrectly shown as a Left Employee for an earlier range.
+  // This prevents an employee who continued working after the
+  // selected range from appearing as a Left Employee for that
+  // earlier period.
   // =========================================================
 
   async getLeftEmployeeReport(query: LeftEmployeeReportQueryDto) {
@@ -184,8 +189,23 @@ export class EmployeeReportsService {
 
     const reportEmployees = employees
       .map((employee) => {
+        const attendanceDerivedLastWorkingDate =
+          employee.attendanceDerivedLastWorkingDate;
+
+        // Locked rule:
+        // If attendance proves that the employee continued
+        // working after the selected To Date, this employee
+        // cannot be treated as left within the earlier range.
+        if (
+          attendanceDerivedLastWorkingDate &&
+          attendanceDerivedLastWorkingDate.getTime() >=
+            toDateExclusive.getTime()
+        ) {
+          return null;
+        }
+
         const lastWorkingDate =
-          employee.leftDate ?? employee.attendanceDerivedLastWorkingDate;
+          employee.leftDate ?? attendanceDerivedLastWorkingDate;
 
         if (!lastWorkingDate) {
           return null;
