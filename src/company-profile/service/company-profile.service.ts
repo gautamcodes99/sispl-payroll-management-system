@@ -128,6 +128,26 @@ export class CompanyProfileService {
         updateCompanyProfileDto.mlwfRegistrationNumber,
         existing?.mlwfRegistrationNumber,
       ),
+      companyHistory: this.optionalString(
+        updateCompanyProfileDto.companyHistory,
+        existing?.companyHistory,
+      ),
+      mission: this.optionalString(
+        updateCompanyProfileDto.mission,
+        existing?.mission,
+      ),
+      primaryGoals: this.optionalString(
+        updateCompanyProfileDto.primaryGoals,
+        existing?.primaryGoals,
+      ),
+      customers: this.optionalString(
+        updateCompanyProfileDto.customers,
+        existing?.customers,
+      ),
+      services: this.optionalString(
+        updateCompanyProfileDto.services,
+        existing?.services,
+      ),
     };
 
     const companyProfile = await this.companyProfileRepository.save(data);

@@ -707,6 +707,12 @@ model CompanyProfile {
   ptaxRegistrationNumber String?
   mlwfRegistrationNumber String?
 
+  companyHistory String? @db.Text
+  mission        String? @db.Text
+  primaryGoals   String? @db.Text
+  customers      String? @db.Text
+  services       String? @db.Text
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

@@ -18,6 +18,11 @@ export type SaveCompanyProfileData = {
   esicEmployerCode: string | null;
   ptaxRegistrationNumber: string | null;
   mlwfRegistrationNumber: string | null;
+  companyHistory: string | null;
+  mission: string | null;
+  primaryGoals: string | null;
+  customers: string | null;
+  services: string | null;
 };
 
 @Injectable()

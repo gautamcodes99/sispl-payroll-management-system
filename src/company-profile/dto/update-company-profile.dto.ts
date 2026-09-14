@@ -87,4 +87,29 @@ export class UpdateCompanyProfileDto {
   @IsString()
   @MaxLength(50)
   mlwfRegistrationNumber?: string;
+
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString()
+  @MaxLength(5000)
+  companyHistory?: string;
+
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString()
+  @MaxLength(5000)
+  mission?: string;
+
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString()
+  @MaxLength(5000)
+  primaryGoals?: string;
+
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString()
+  @MaxLength(5000)
+  customers?: string;
+
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString()
+  @MaxLength(5000)
+  services?: string;
 }
