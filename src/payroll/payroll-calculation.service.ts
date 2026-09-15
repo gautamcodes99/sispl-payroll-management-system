@@ -591,9 +591,11 @@ export class PayrollCalculationService {
       );
 
     const mlwf =
-      this.complianceCalculator.calculateMlwf(
-        salaryMonth,
-      );
+      employee.designation.designationName.trim().toUpperCase() === 'SUPERVISOR'
+        ? 0
+        : this.complianceCalculator.calculateMlwf(
+            salaryMonth,
+          );
 
     // =======================================================
     // MANUAL DEDUCTIONS
