@@ -47,7 +47,10 @@ async function bootstrap() {
 
   app.useGlobalFilters(new PrismaExceptionFilter());
 
-  await app.listen(process.env.PORT ?? 3000);
+  const port = process.env.PORT ?? 3000;
+  const host = process.env.HOST?.trim() || '0.0.0.0';
+
+  await app.listen(port, host);
 
   console.log(
     `🚀 SISPL Payroll API is running on: http://localhost:${process.env.PORT ?? 3000}/api/v1`,
