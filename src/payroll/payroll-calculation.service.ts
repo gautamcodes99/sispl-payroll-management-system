@@ -272,7 +272,7 @@ export class PayrollCalculationService {
   // =========================================================
 
   private calculateSpecialAllowance(
-    payableDays: number,
+    eligibleDays: number,
     slabs: {
       minDays: unknown;
       maxDays: unknown;
@@ -281,8 +281,8 @@ export class PayrollCalculationService {
   ) {
     const matchedSlab = slabs.find(
       (slab) =>
-        payableDays >= Number(slab.minDays) &&
-        payableDays <= Number(slab.maxDays),
+        eligibleDays >= Number(slab.minDays) &&
+        eligibleDays <= Number(slab.maxDays),
     );
 
     if (!matchedSlab) {
@@ -298,7 +298,7 @@ export class PayrollCalculationService {
     return {
       ratePerDay,
 
-      amount: payableDays * ratePerDay,
+      amount: eligibleDays * ratePerDay,
 
       slab: {
         minDays: Number(matchedSlab.minDays),
@@ -523,9 +523,14 @@ export class PayrollCalculationService {
     // SPECIAL ALLOWANCE
     // =======================================================
 
+    const specialAllowanceDays = Math.max(
+      0,
+      attendance.payableDays - attendance.paidHolidays,
+    );
+
     const specialAllowance =
       this.calculateSpecialAllowance(
-        attendance.payableDays,
+        specialAllowanceDays,
         wageMaster.specialAllowances,
       );
 
