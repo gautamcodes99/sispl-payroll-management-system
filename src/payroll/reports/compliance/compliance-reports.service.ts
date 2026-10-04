@@ -102,7 +102,7 @@ export class ComplianceReportsService {
   // PF Employee = snapshot.pf
   //
   // Report-derived values:
-  // PF Wages    = min(Wages, 15000)
+  // PF Wages    = Wages
   // PF Employer = PF Wages * 12%
   // EDLI/Admin  = PF Wages * 1%
   //
@@ -122,7 +122,7 @@ export class ComplianceReportsService {
     const employees = payrollRun.snapshots.map((snapshot, index) => {
       const wagesBasicDa = this.money(snapshot.wages);
 
-      const pfWages = this.money(Math.min(wagesBasicDa, 15000));
+      const pfWages = wagesBasicDa;
 
       const pfEmployee = this.money(snapshot.pf);
       const pfEmployer = this.money(pfWages * 0.12);
