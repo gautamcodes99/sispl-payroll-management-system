@@ -6,7 +6,7 @@ export class ComplianceCalculatorService {
     const pfWages = basic + da;
     const pfAmount = pfWages * 0.12;
 
-    return Math.min(pfAmount, 1800);
+    return pfAmount;
   }
 
   calculateEsic(
