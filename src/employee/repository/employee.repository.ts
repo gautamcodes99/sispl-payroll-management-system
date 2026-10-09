@@ -154,54 +154,47 @@ export class EmployeeRepository {
     // =======================================================
     // EMPLOYEE SEARCH
     //
-    // Supports:
-    // 1. Employee ID
-    // 2. First Name
-    // 3. Last Name
-    // 4. Email
-    // 5. Phone
+    // Alphabetic/text search: First Name + Last Name.
+    // Numeric search: Employee ID prefix for partial input.
+    //
+    // Phone and email are intentionally excluded so numeric
+    // Employee ID searches do not return unrelated phone
+    // number matches.
     // =======================================================
 
     if (search?.trim()) {
       const normalizedSearch = search.trim();
 
-      const searchConditions: Prisma.EmployeeWhereInput[] = [
-        {
-          firstName: {
-            contains: normalizedSearch,
-            mode: 'insensitive',
-          },
-        },
-
-        {
-          lastName: {
-            contains: normalizedSearch,
-            mode: 'insensitive',
-          },
-        },
-
-        {
-          email: {
-            contains: normalizedSearch,
-            mode: 'insensitive',
-          },
-        },
-
-        {
-          phone: {
-            contains: normalizedSearch,
-            mode: 'insensitive',
-          },
-        },
-      ];
-
       if (/^\d+$/.test(normalizedSearch)) {
-        searchConditions.unshift({
-          id: Number(normalizedSearch),
-        });
-      }
+        const numericSearch = Number(normalizedSearch);
 
-      where.OR = searchConditions;
+        if (normalizedSearch.length < 4) {
+          const multiplier = 10 ** (4 - normalizedSearch.length);
+
+          where.id = {
+            gte: numericSearch * multiplier,
+            lt: (numericSearch + 1) * multiplier,
+          };
+        } else {
+          where.id = numericSearch;
+        }
+      } else {
+        where.OR = [
+          {
+            firstName: {
+              contains: normalizedSearch,
+              mode: 'insensitive',
+            },
+          },
+
+          {
+            lastName: {
+              contains: normalizedSearch,
+              mode: 'insensitive',
+            },
+          },
+        ];
+      }
     }
 
     // =======================================================
