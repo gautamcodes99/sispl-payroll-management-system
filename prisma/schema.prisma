@@ -381,11 +381,11 @@ model PayrollEmployeeSnapshot {
   // ---------------------------------------------------------
 
   pf   Decimal @db.Decimal(14, 2)
-  esic Decimal @db.Decimal(14, 2)
+  esic Decimal @db.Decimal(18, 6)
   ptax Decimal @db.Decimal(14, 2)
   mlwf Decimal @db.Decimal(14, 2)
 
-  statutoryDeductionTotal Decimal @db.Decimal(14, 2)
+  statutoryDeductionTotal Decimal @db.Decimal(18, 6)
 
   // ---------------------------------------------------------
   // MANUAL DEDUCTIONS
@@ -404,8 +404,8 @@ model PayrollEmployeeSnapshot {
   // FINAL TOTALS
   // ---------------------------------------------------------
 
-  totalDeductions Decimal @db.Decimal(14, 2)
-  netSalary       Decimal @db.Decimal(14, 2)
+  totalDeductions Decimal @db.Decimal(18, 6)
+  netSalary       Decimal @db.Decimal(18, 6)
 
   // ---------------------------------------------------------
   // WARNINGS

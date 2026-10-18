@@ -185,8 +185,7 @@ export class PayrollService {
       pf:
         this.money(payroll.statutoryDeductions.pf),
 
-      esic:
-        this.money(payroll.statutoryDeductions.esic),
+      esic: payroll.statutoryDeductions.esic,
 
       ptax:
         this.money(payroll.statutoryDeductions.ptax),
@@ -194,10 +193,7 @@ export class PayrollService {
       mlwf:
         this.money(payroll.statutoryDeductions.mlwf),
 
-      statutoryDeductionTotal:
-        this.money(
-          payroll.statutoryDeductions.total,
-        ),
+      statutoryDeductionTotal: payroll.statutoryDeductions.total,
 
       advanceRecovery:
         this.money(
@@ -226,11 +222,9 @@ export class PayrollService {
       manualDeductionTotal:
         this.money(payroll.manualDeductions.total),
 
-      totalDeductions:
-        this.money(payroll.totalDeductions),
+      totalDeductions: payroll.totalDeductions,
 
-      netSalary:
-        this.money(payroll.netSalary),
+      netSalary: payroll.netSalary,
 
       warnings: payroll.warnings,
     };

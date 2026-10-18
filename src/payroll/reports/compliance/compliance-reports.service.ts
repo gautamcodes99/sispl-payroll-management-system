@@ -246,9 +246,9 @@ export class ComplianceReportsService {
         wages + otAmount,
       );
 
-      const esicEmployee = this.money(snapshot.esic);
+      const esicEmployee = Number(snapshot.esic);
 
-      const esicEmployer = this.money(esicWages * 0.0325);
+      const esicEmployer = esicWages * 0.0325;
 
       return {
         serialNumber: index + 1,
@@ -320,8 +320,8 @@ export class ComplianceReportsService {
 
         specialAllowance: this.money(totals.specialAllowance),
         esicWages: this.money(totals.esicWages),
-        esicEmployee: this.money(totals.esicEmployee),
-        esicEmployer: this.money(totals.esicEmployer),
+        esicEmployee: totals.esicEmployee,
+        esicEmployer: totals.esicEmployer,
       },
     };
   }
