@@ -120,13 +120,13 @@ export class ComplianceReportsService {
       await this.getCurrentPayrollRun(siteId, salaryMonthInput);
 
     const employees = payrollRun.snapshots.map((snapshot, index) => {
-      const wagesBasicDa = this.money(snapshot.wages);
+      const wagesBasicDa = Number(snapshot.wages);
 
       const pfWages = wagesBasicDa;
 
-      const pfEmployee = this.money(snapshot.pf);
-      const pfEmployer = this.money(pfWages * 0.12);
-      const edliAdminCharges = this.money(pfWages * 0.01);
+      const pfEmployee = Number(snapshot.pf);
+      const pfEmployer = pfWages * 0.12;
+      const edliAdminCharges = pfWages * 0.01;
 
       return {
         serialNumber: index + 1,
@@ -137,7 +137,7 @@ export class ComplianceReportsService {
 
         payableDays: Number(snapshot.payableDays),
 
-        grossPay: this.money(snapshot.gross),
+        grossPay: Number(snapshot.gross),
         wagesBasicDa,
         pfWages,
 
@@ -184,12 +184,12 @@ export class ComplianceReportsService {
 
       totals: {
         payableDays: Number(totals.payableDays.toFixed(1)),
-        grossPay: this.money(totals.grossPay),
-        wagesBasicDa: this.money(totals.wagesBasicDa),
-        pfWages: this.money(totals.pfWages),
-        pfEmployee: this.money(totals.pfEmployee),
-        pfEmployer: this.money(totals.pfEmployer),
-        edliAdminCharges: this.money(totals.edliAdminCharges),
+        grossPay: totals.grossPay,
+        wagesBasicDa: totals.wagesBasicDa,
+        pfWages: totals.pfWages,
+        pfEmployee: totals.pfEmployee,
+        pfEmployer: totals.pfEmployer,
+        edliAdminCharges: totals.edliAdminCharges,
       },
     };
   }
@@ -236,15 +236,13 @@ export class ComplianceReportsService {
       await this.getCurrentPayrollRun(siteId, salaryMonthInput);
 
     const employees = payrollRun.snapshots.map((snapshot, index) => {
-      const grossPay = this.money(snapshot.gross);
-      const wages = this.money(snapshot.wages);
-      const otAmount = this.money(snapshot.otAmount);
+      const grossPay = Number(snapshot.gross);
+      const wages = Number(snapshot.wages);
+      const otAmount = Number(snapshot.otAmount);
       const conveyanceAllowance = this.money(snapshot.conveyance);
-      const specialAllowance = this.money(snapshot.specialAllowanceAmount);
+      const specialAllowance = Number(snapshot.specialAllowanceAmount);
 
-      const esicWages = this.money(
-        wages + otAmount,
-      );
+      const esicWages = wages + otAmount;
 
       const esicEmployee = Number(snapshot.esic);
 
@@ -312,14 +310,14 @@ export class ComplianceReportsService {
 
       totals: {
         payableDays: Number(totals.payableDays.toFixed(1)),
-        grossPay: this.money(totals.grossPay),
-        wages: this.money(totals.wages),
-        otAmount: this.money(totals.otAmount),
+        grossPay: totals.grossPay,
+        wages: totals.wages,
+        otAmount: totals.otAmount,
 
         // Legacy Special Allowance total retained for API compatibility.
 
-        specialAllowance: this.money(totals.specialAllowance),
-        esicWages: this.money(totals.esicWages),
+        specialAllowance: totals.specialAllowance,
+        esicWages: totals.esicWages,
         esicEmployee: totals.esicEmployee,
         esicEmployer: totals.esicEmployer,
       },

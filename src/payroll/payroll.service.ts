@@ -131,25 +131,25 @@ export class PayrollService {
         this.money(payroll.earnings.monthlyDa),
 
       earnedBasic:
-        this.money(payroll.earnings.earnedBasic),
+        payroll.earnings.earnedBasic,
 
       earnedDa:
-        this.money(payroll.earnings.earnedDa),
+        payroll.earnings.earnedDa,
 
       wages:
-        this.money(payroll.earnings.wages),
+        payroll.earnings.wages,
 
       hraPercentage:
         payroll.earnings.hraPercentage,
 
       hra:
-        this.money(payroll.earnings.hra),
+        payroll.earnings.hra,
 
       otRate:
-        this.money(payroll.earnings.otRate),
+        payroll.earnings.otRate,
 
       otAmount:
-        this.money(payroll.earnings.otAmount),
+        payroll.earnings.otAmount,
 
       conveyance:
         this.money(payroll.earnings.conveyance),
@@ -169,9 +169,7 @@ export class PayrollService {
         : null,
 
       specialAllowanceAmount:
-        this.money(
-          payroll.earnings.specialAllowance.amount,
-        ),
+        payroll.earnings.specialAllowance.amount,
 
       rab:
         this.money(payroll.earnings.rab),
@@ -180,10 +178,10 @@ export class PayrollService {
         this.money(payroll.earnings.arrears),
 
       gross:
-        this.money(payroll.earnings.gross),
+        payroll.earnings.gross,
 
       pf:
-        this.money(payroll.statutoryDeductions.pf),
+        payroll.statutoryDeductions.pf,
 
       esic: payroll.statutoryDeductions.esic,
 

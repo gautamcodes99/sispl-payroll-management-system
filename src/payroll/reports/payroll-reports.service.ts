@@ -131,22 +131,22 @@ export class PayrollReportsService {
         paidHolidays: Number(snapshot.paidHolidays),
         payableDays: Number(snapshot.payableDays),
 
-        wages: this.money(snapshot.wages),
+        wages: Number(snapshot.wages),
 
         otHours: Number(snapshot.otHours),
-        otRate: this.money(snapshot.otRate),
-        otAmount: this.money(snapshot.otAmount),
+        otRate: Number(snapshot.otRate),
+        otAmount: Number(snapshot.otAmount),
 
-        hra: this.money(snapshot.hra),
+        hra: Number(snapshot.hra),
         conveyance: this.money(snapshot.conveyance),
         specialAllowance: this.money(snapshot.specialAllowanceAmount),
         rab: this.money(snapshot.rab),
         arrears: this.money(snapshot.arrears),
 
-        grossPay: this.money(snapshot.gross),
+        grossPay: Number(snapshot.gross),
 
-        esic: this.money(snapshot.esic),
-        pf: this.money(snapshot.pf),
+        esic: Number(snapshot.esic),
+        pf: Number(snapshot.pf),
         ptax: this.money(snapshot.ptax),
         mlwf: this.money(snapshot.mlwf),
 
@@ -157,9 +157,9 @@ export class PayrollReportsService {
         transport: this.money(snapshot.transport),
         otherDeduction: this.money(snapshot.otherDeduction),
 
-        totalDeduction: this.money(snapshot.totalDeductions),
+        totalDeduction: Number(snapshot.totalDeductions),
 
-        netPaid: this.money(snapshot.netSalary),
+        netPaid: Number(snapshot.netSalary),
 
         payment: {
           status: snapshot.payment?.status ?? 'UNPAID',
@@ -282,21 +282,21 @@ export class PayrollReportsService {
           paidHolidays: Number(totals.paidHolidays.toFixed(1)),
           payableDays: Number(totals.payableDays.toFixed(1)),
 
-          wages: this.money(totals.wages),
+          wages: totals.wages,
 
           otHours: Number(totals.otHours.toFixed(2)),
-          otAmount: this.money(totals.otAmount),
+          otAmount: totals.otAmount,
 
-          hra: this.money(totals.hra),
+          hra: totals.hra,
           conveyance: this.money(totals.conveyance),
           specialAllowance: this.money(totals.specialAllowance),
           rab: this.money(totals.rab),
           arrears: this.money(totals.arrears),
 
-          grossPay: this.money(totals.grossPay),
+          grossPay: totals.grossPay,
 
-          esic: this.money(totals.esic),
-          pf: this.money(totals.pf),
+          esic: totals.esic,
+          pf: totals.pf,
           ptax: this.money(totals.ptax),
           mlwf: this.money(totals.mlwf),
 
@@ -307,9 +307,9 @@ export class PayrollReportsService {
           transport: this.money(totals.transport),
           otherDeduction: this.money(totals.otherDeduction),
 
-          totalDeduction: this.money(totals.totalDeduction),
+          totalDeduction: totals.totalDeduction,
 
-          netPaid: this.money(totals.netPaid),
+          netPaid: totals.netPaid,
         },
       },
     };
