@@ -9,12 +9,8 @@ export class ComplianceCalculatorService {
     return pfAmount;
   }
 
-  calculateEsic(
-    gross: number,
-    conveyance: number,
-    specialAllowance: number,
-  ): number {
-    const esicWages = gross - conveyance - specialAllowance;
+  calculateEsic(wages: number, otAmount: number): number {
+    const esicWages = wages + otAmount;
 
     return esicWages * 0.0075;
   }

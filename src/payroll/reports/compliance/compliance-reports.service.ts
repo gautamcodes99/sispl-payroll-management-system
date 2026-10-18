@@ -197,47 +197,37 @@ export class ComplianceReportsService {
   // =========================================================
   // ESIC ANNEXURE
   //
-  // Approved mapping:
+  // Approved revised Excel mapping:
   //
   // A SNO
   // B EMP ID
   // C ESIC NO
   // D EMP NAME
   // E DAYS INC PH
-  // F GROSS PAY
-  // G WAGES
-  // H CONVEYANCE ALLOWANCE
-  // I SPECIAL ALLOWANCE
-  // J GROSS AFTER (CONV & SPECIAL DED)
-  // K ESIC EMPLOYEE
-  // L ESIC EMPLOYER
+  // F WAGES
+  // G OT AMOUNT
+  // H ESIC WAGES
+  // I ESIC EMPLOYEE
+  // J ESIC EMPLOYER
   //
   // Snapshot values:
-  // ESIC No.          = snapshot.esicNumber
-  // Days              = snapshot.payableDays
-  // Gross             = snapshot.gross
-  // Wages             = snapshot.wages
-  // Conveyance        = snapshot.conveyance
-  // Special Allowance = snapshot.specialAllowanceAmount
-  // Employee ESIC     = snapshot.esic
+  // ESIC No.      = snapshot.esicNumber
+  // Days          = snapshot.payableDays
+  // Wages         = snapshot.wages
+  // OT Amount     = snapshot.otAmount
+  // Employee ESIC = snapshot.esic
   //
-  // Report-derived values:
+  // ESIC Wages    = Wages + OT Amount
+  // Employer ESIC = ESIC Wages * 3.25%
   //
-  // ESIC Wage Base
-  // = Gross - Conveyance - Special Allowance
+  // Gross, Conveyance and Special Allowance remain in the API
+  // response for backward compatibility, but are not columns
+  // in the revised ESIC Annexure Excel format.
   //
-  // Employer ESIC
-  // = ESIC Wage Base * 3.25%
-  //
-  // Employee ESIC is NOT recalculated here.
-  //
-  // No report-side ESIC eligibility ceiling/filter is
-  // introduced.
-  //
-  // All employees present in the current Payroll Run
-  // snapshot are included.
+  // Employee ESIC is NOT recalculated in the report.
+  // All employees present in the current Payroll Run snapshot
+  // are included.
   // =========================================================
-
   async getEsicAnnexure(
     siteId: number,
     salaryMonthInput: Date,
@@ -248,11 +238,12 @@ export class ComplianceReportsService {
     const employees = payrollRun.snapshots.map((snapshot, index) => {
       const grossPay = this.money(snapshot.gross);
       const wages = this.money(snapshot.wages);
+      const otAmount = this.money(snapshot.otAmount);
       const conveyanceAllowance = this.money(snapshot.conveyance);
       const specialAllowance = this.money(snapshot.specialAllowanceAmount);
 
       const esicWages = this.money(
-        grossPay - conveyanceAllowance - specialAllowance,
+        wages + otAmount,
       );
 
       const esicEmployee = this.money(snapshot.esic);
@@ -270,6 +261,7 @@ export class ComplianceReportsService {
 
         grossPay,
         wages,
+        otAmount,
 
         conveyanceAllowance,
         specialAllowance,
@@ -286,6 +278,7 @@ export class ComplianceReportsService {
         total.payableDays += employee.payableDays;
         total.grossPay += employee.grossPay;
         total.wages += employee.wages;
+        total.otAmount += employee.otAmount;
         total.specialAllowance += employee.specialAllowance;
         total.esicWages += employee.esicWages;
         total.esicEmployee += employee.esicEmployee;
@@ -297,6 +290,7 @@ export class ComplianceReportsService {
         payableDays: 0,
         grossPay: 0,
         wages: 0,
+        otAmount: 0,
         specialAllowance: 0,
         esicWages: 0,
         esicEmployee: 0,
@@ -320,9 +314,9 @@ export class ComplianceReportsService {
         payableDays: Number(totals.payableDays.toFixed(1)),
         grossPay: this.money(totals.grossPay),
         wages: this.money(totals.wages),
+        otAmount: this.money(totals.otAmount),
 
-        // Approved Excel TOTAL row intentionally leaves
-        // Conveyance Allowance blank.
+        // Legacy Special Allowance total retained for API compatibility.
 
         specialAllowance: this.money(totals.specialAllowance),
         esicWages: this.money(totals.esicWages),

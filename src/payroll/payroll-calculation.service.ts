@@ -577,9 +577,8 @@ export class PayrollCalculationService {
 
     const esic =
       this.complianceCalculator.calculateEsic(
-        gross,
-        conveyance,
-        specialAllowance.amount,
+        wages,
+        otAmount,
       );
 
     if (!employee.gender) {
