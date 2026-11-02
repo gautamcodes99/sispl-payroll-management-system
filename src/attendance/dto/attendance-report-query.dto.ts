@@ -34,6 +34,12 @@ export class AttendanceReportQueryDto {
   departmentId?: number;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  designationId?: number;
+
+  @IsOptional()
   @IsEnum(AttendanceShift)
   shift?: AttendanceShift;
 }

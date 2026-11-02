@@ -1041,6 +1041,10 @@ export class AttendanceRepository {
       };
     }
 
+    if (query.designationId) {
+      where.designationId = query.designationId;
+    }
+
     if (query.shift) {
       where.shift = query.shift;
     }
@@ -1148,6 +1152,10 @@ export class AttendanceRepository {
             }
           : {}),
       };
+    }
+
+    if (query.designationId) {
+      where.designationId = query.designationId;
     }
 
     if (query.shift) {
