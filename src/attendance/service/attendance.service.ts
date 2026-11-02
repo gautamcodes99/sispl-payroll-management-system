@@ -830,7 +830,25 @@ export class AttendanceService {
 
           const code =
             entries.length > 0
-              ? entries.map((entry) => entry.code).join('/')
+              ? entries
+                  .map((entry, index) => {
+                    // Shift-specific report display for Present / Half Day.
+                    // Keep original codes unchanged for manday calculations.
+                    if (entry.code === 'P' || entry.code === 'HD') {
+                      const prefix =
+                        entry.shift === 'SECOND'
+                          ? '/'
+                          : entry.shift === 'THIRD'
+                            ? '//'
+                            : '';
+
+                      return `${prefix}${entry.code}`;
+                    }
+
+                    // Preserve separators for other attendance statuses.
+                    return `${index > 0 ? '/' : ''}${entry.code}`;
+                  })
+                  .join('')
               : !employee.manualAttendanceDays.has(day) &&
                   calendarEntry?.type === 'WEEK_OFF'
                 ? 'WO'
@@ -1361,7 +1379,25 @@ export class AttendanceService {
 
           const code =
             entries.length > 0
-              ? entries.map((entry) => entry.code).join('/')
+              ? entries
+                  .map((entry, index) => {
+                    // Shift-specific report display for Present / Half Day.
+                    // Keep original codes unchanged for manday calculations.
+                    if (entry.code === 'P' || entry.code === 'HD') {
+                      const prefix =
+                        entry.shift === 'SECOND'
+                          ? '/'
+                          : entry.shift === 'THIRD'
+                            ? '//'
+                            : '';
+
+                      return `${prefix}${entry.code}`;
+                    }
+
+                    // Preserve separators for other attendance statuses.
+                    return `${index > 0 ? '/' : ''}${entry.code}`;
+                  })
+                  .join('')
               : !employee.manualAttendanceDays.has(day) &&
                   calendarEntry?.type === 'WEEK_OFF'
                 ? 'WO'
