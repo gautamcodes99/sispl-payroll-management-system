@@ -4,7 +4,7 @@ import {
   Get,
   Param,
   ParseIntPipe,
-  Patch,
+  Patch, Post,
   Query,
 } from '@nestjs/common';
 import { WageSheetQueryDto } from './dto/wage-sheet-query.dto';
@@ -12,6 +12,7 @@ import { FormIiQueryDto } from './dto/form-ii-query.dto';
 import { PayrollReportsService } from './payroll-reports.service';
 import { UpdatePayrollPaymentDto } from './dto/update-payroll-payment.dto';
 import { BulkUpdatePayrollPaymentDto } from './dto/bulk-update-payroll-payment.dto';
+import { ImportPayrollPaymentsDto } from './dto/import-payroll-payments.dto';
 import { SalaryRegisterQueryDto } from './dto/salary-register-query.dto';
 import { BankTransferQueryDto } from './dto/bank-transfer-query.dto';
 import { PayslipQueryDto } from './dto/payslip-query.dto';
@@ -88,6 +89,18 @@ export class PayrollReportsController {
       dto.paymentMode,
     );
   }
+  // =========================================================
+  // BANK TRANSFER - IMPORT EMPLOYEE PAYMENTS
+  //
+  // Excel is parsed and previewed in the frontend.
+  // Service validates all rows before atomic update.
+  // =========================================================
+
+  @Post('bank-transfer/payments/import')
+  async importPayrollPayments(@Body() dto: ImportPayrollPaymentsDto) {
+    return this.payrollReportsService.importPayrollPayments(dto);
+  }
+
   // =========================================================
   // SALARY REGISTER
   // =========================================================

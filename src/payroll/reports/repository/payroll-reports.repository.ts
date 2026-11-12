@@ -356,6 +356,44 @@ export class PayrollReportsRepository {
     );
   }
   // =========================================================
+  // PAYROLL PAYMENT - IMPORT MULTIPLE PAYMENT VALUES
+  //
+  // Each snapshot can have a different date and mode.
+  // All payment updates are saved atomically.
+  // =========================================================
+
+  async upsertImportedPayrollPayments(
+    payments: Array<{
+      snapshotId: number;
+      status: 'UNPAID' | 'PAID';
+      paymentDate: Date | null;
+      paymentMode: 'BANK_TRANSFER' | 'CHEQUE' | null;
+    }>,
+  ) {
+    return this.prisma.$transaction(
+      payments.map((payment) =>
+        this.prisma.payrollPayment.upsert({
+          where: {
+            payrollSnapshotId: payment.snapshotId,
+          },
+
+          create: {
+            payrollSnapshotId: payment.snapshotId,
+            status: payment.status,
+            paymentDate: payment.paymentDate,
+            paymentMode: payment.paymentMode,
+          },
+
+          update: {
+            status: payment.status,
+            paymentDate: payment.paymentDate,
+            paymentMode: payment.paymentMode,
+          },
+        }),
+      ),
+    );
+  }
+  // =========================================================
   // SALARY REGISTER / BANK TRANSFER - CURRENT PAYROLL
   //
   // Company-wide Payroll Report source.

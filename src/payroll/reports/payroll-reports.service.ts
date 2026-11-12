@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PayrollReportsRepository } from './repository/payroll-reports.repository';
+import { ImportPayrollPaymentsDto } from './dto/import-payroll-payments.dto';
 import { ManualDeductionService } from '../../manual-deduction/service/manual-deduction.service';
 
 @Injectable()
@@ -2220,6 +2221,124 @@ export class PayrollReportsService {
         },
 
         snapshotIds: uniqueSnapshotIds,
+      },
+    };
+  }
+
+  // =========================================================
+  // BANK TRANSFER - IMPORT EMPLOYEE PAYMENT UPDATES
+  //
+  // Validate every employee against the current finalized
+  // Site-wise Payroll Run before writing any payment records.
+  //
+  // Only payment metadata is updated.
+  // =========================================================
+
+  async importPayrollPayments(dto: ImportPayrollPaymentsDto) {
+    const salaryMonthInput = new Date(dto.salaryMonth);
+
+    if (Number.isNaN(salaryMonthInput.getTime())) {
+      throw new BadRequestException('Salary month is invalid.');
+    }
+
+    const salaryMonth = this.normalizeSalaryMonth(salaryMonthInput);
+
+    await this.getSiteOrThrow(dto.siteId);
+
+    if (!dto.payments?.length) {
+      throw new BadRequestException(
+        'At least one payment row is required.',
+      );
+    }
+
+    // Use the same snapshots displayed in Bank Transfer Statement.
+    const payrollRun =
+      await this.payrollReportsRepository.findCurrentPayrollRunWithSnapshotsAndPayments(
+        salaryMonth,
+        dto.siteId,
+      );
+
+    if (!payrollRun) {
+      throw new NotFoundException(
+        'No current Payroll Run found for the selected Site and Salary Month.',
+      );
+    }
+
+    if (payrollRun.status !== 'FINALIZED') {
+      throw new ConflictException(
+        'Payments can only be imported for the current finalized Payroll Run.',
+      );
+    }
+
+    const snapshotByEmployeeId = new Map(
+      payrollRun.snapshots.map(
+        (snapshot) => [snapshot.employeeId, snapshot] as const,
+      ),
+    );
+
+    const seenEmployeeIds = new Set<number>();
+
+    // Validate every imported row before starting the transaction.
+    const payments = dto.payments.map((row, index) => {
+      const excelRowNumber = index + 2;
+
+      if (seenEmployeeIds.has(row.employeeId)) {
+        throw new BadRequestException(
+          `Excel row ${excelRowNumber}: Duplicate Employee ID ${row.employeeId}.`,
+        );
+      }
+
+      seenEmployeeIds.add(row.employeeId);
+
+      const snapshot = snapshotByEmployeeId.get(row.employeeId);
+
+      if (!snapshot) {
+        throw new BadRequestException(
+          `Excel row ${excelRowNumber}: Employee ID ${row.employeeId} does not belong to the selected Site and current Payroll Run.`,
+        );
+      }
+
+      if (
+        row.status === 'PAID' &&
+        (!row.paymentDate || !row.paymentMode)
+      ) {
+        throw new BadRequestException(
+          `Excel row ${excelRowNumber}: Payment Date and Mode are required when status is PAID.`,
+        );
+      }
+
+      // Reuse existing payroll payment business validation.
+      // UNPAID automatically clears payment date and mode.
+      const { paymentDate, paymentMode } =
+        this.resolvePaymentValues(
+          row.status,
+          row.paymentDate,
+          row.paymentMode,
+        );
+
+      return {
+        snapshotId: snapshot.id,
+        status: row.status,
+        paymentDate,
+        paymentMode,
+      };
+    });
+
+    // Atomic transaction: all rows succeed or none are saved.
+    const updatedPayments =
+      await this.payrollReportsRepository.upsertImportedPayrollPayments(
+        payments,
+      );
+
+    return {
+      success: true,
+      message: 'Payroll payment import completed successfully.',
+      data: {
+        siteId: dto.siteId,
+        salaryMonth,
+        payrollRunId: payrollRun.id,
+        updatedCount: updatedPayments.length,
+        employeeIds: dto.payments.map((row) => row.employeeId),
       },
     };
   }
